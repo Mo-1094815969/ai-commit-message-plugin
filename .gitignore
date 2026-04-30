@@ -1,0 +1,16 @@
+.gradle/
+.idea/
+.intellijPlatform/
+.setting/
+build/
+
+*.class
+*.jar
+*.log
+*.tmp
+*.swp
+*.bak
+*.iml
+
+.DS_Store
+Thumbs.db

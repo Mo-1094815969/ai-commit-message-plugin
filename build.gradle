@@ -1,0 +1,46 @@
+plugins {
+    id 'java'
+    id 'org.jetbrains.intellij' version '1.17.4'
+}
+
+group = 'com.github.aicommit'
+version = '0.1.0'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+dependencies {
+    implementation 'com.google.code.gson:gson:2.10.1'
+    implementation 'org.xerial:sqlite-jdbc:3.45.3.0'
+    testImplementation 'junit:junit:4.13.2'
+}
+
+intellij {
+    version = '2022.1.4'
+    type = 'IC'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release.set(11)
+}
+
+patchPluginXml {
+    sinceBuild = '221'
+    untilBuild = ''
+    changeNotes = '<p>Initial MVP for AI commit message generation.</p>'
+}
+
+tasks.matching { it.name.startsWith('buildSearchableOptions') }.configureEach {
+    enabled = false
+}
+
+tasks.named('buildSearchableOptions') {
+    enabled = false
+}
