@@ -10,6 +10,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Map;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 public final class JsonHttp {
     private static final Gson GSON = new Gson();
@@ -34,6 +36,38 @@ public final class JsonHttp {
             throw new IOException("HTTP " + response.statusCode() + ": " + shorten(response.body()));
         }
         return GSON.fromJson(response.body(), JsonObject.class);
+    }
+
+    public void postJsonLines(String url, JsonObject body, Map<String, String> headers, int timeoutSeconds,
+                              Consumer<String> lineConsumer)
+            throws IOException, InterruptedException {
+        HttpClient client = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(Math.min(timeoutSeconds, 30)))
+                .build();
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(Duration.ofSeconds(timeoutSeconds))
+                .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(body)))
+                .header("Content-Type", "application/json")
+                .header("Accept", "text/event-stream");
+        for (Map.Entry<String, String> header : headers.entrySet()) {
+            if (header.getValue() != null && !header.getValue().trim().isEmpty()) {
+                builder.header(header.getKey(), header.getValue());
+            }
+        }
+        HttpResponse<Stream<String>> response = client.send(builder.build(), HttpResponse.BodyHandlers.ofLines());
+        try (Stream<String> lines = response.body()) {
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                StringBuilder error = new StringBuilder();
+                lines.limit(20).forEach(line -> {
+                    if (error.length() < 800) {
+                        error.append(line).append('\n');
+                    }
+                });
+                throw new IOException("HTTP " + response.statusCode() + ": " + shorten(error.toString()));
+            }
+            lines.forEach(lineConsumer);
+        }
     }
 
     private String shorten(String text) {

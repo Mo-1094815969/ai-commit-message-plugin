@@ -3,10 +3,12 @@ package com.github.aicommit.provider;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.Consumer;
 
 public final class OpenAiProvider implements AiProvider {
     private static final String DEFAULT_BASE_URL = "https://api.openai.com";
@@ -23,6 +25,16 @@ public final class OpenAiProvider implements AiProvider {
             return generateWithResponsesApi(prompt, config, timeoutSeconds);
         }
         return generateWithChatCompletionsApi(prompt, config, timeoutSeconds);
+    }
+
+    @Override
+    public String generateStreaming(String prompt, EffectiveProviderConfig config, int timeoutSeconds,
+                                    Consumer<String> chunkConsumer)
+            throws IOException, InterruptedException {
+        if ("responses".equalsIgnoreCase(trim(config.getWireApi()))) {
+            return generateWithStreamingResponsesApi(prompt, config, timeoutSeconds, chunkConsumer);
+        }
+        return generateWithStreamingChatCompletionsApi(prompt, config, timeoutSeconds, chunkConsumer);
     }
 
     private String generateWithChatCompletionsApi(String prompt, EffectiveProviderConfig config, int timeoutSeconds)
@@ -54,6 +66,57 @@ public final class OpenAiProvider implements AiProvider {
         String url = endpointUrl(config.getBaseUrl(), "/responses");
         JsonObject response = new JsonHttp().postJson(url, body, headers, timeoutSeconds);
         return extractResponsesText(response, "OpenAI");
+    }
+
+    private String generateWithStreamingChatCompletionsApi(String prompt, EffectiveProviderConfig config,
+                                                           int timeoutSeconds, Consumer<String> chunkConsumer)
+            throws IOException, InterruptedException {
+        JsonObject body = new JsonObject();
+        body.addProperty("model", valueOr(config.getModel(), "gpt-4.1-mini"));
+        body.addProperty("temperature", 0.2);
+        body.addProperty("stream", true);
+
+        JsonArray messages = new JsonArray();
+        JsonObject user = new JsonObject();
+        user.addProperty("role", "user");
+        user.addProperty("content", prompt);
+        messages.add(user);
+        body.add("messages", messages);
+
+        StringBuilder out = new StringBuilder();
+        new JsonHttp().postJsonLines(endpointUrl(config.getBaseUrl(), "/chat/completions"), body,
+                authHeaders(config.getApiKey()), timeoutSeconds, line -> {
+                    String text = extractStreamingChatText(line);
+                    if (!text.isEmpty()) {
+                        out.append(text);
+                        if (chunkConsumer != null) {
+                            chunkConsumer.accept(text);
+                        }
+                    }
+                });
+        return out.toString();
+    }
+
+    private String generateWithStreamingResponsesApi(String prompt, EffectiveProviderConfig config, int timeoutSeconds,
+                                                     Consumer<String> chunkConsumer)
+            throws IOException, InterruptedException {
+        JsonObject body = new JsonObject();
+        body.addProperty("model", valueOr(config.getModel(), "gpt-4.1-mini"));
+        body.addProperty("input", prompt);
+        body.addProperty("stream", true);
+
+        StringBuilder out = new StringBuilder();
+        new JsonHttp().postJsonLines(endpointUrl(config.getBaseUrl(), "/responses"), body,
+                authHeaders(config.getApiKey()), timeoutSeconds, line -> {
+                    String text = extractStreamingResponsesText(line);
+                    if (!text.isEmpty()) {
+                        out.append(text);
+                        if (chunkConsumer != null) {
+                            chunkConsumer.accept(text);
+                        }
+                    }
+                });
+        return out.toString();
     }
 
     static String extractChatCompletionText(JsonObject response, String providerName) throws IOException {
@@ -106,6 +169,63 @@ public final class OpenAiProvider implements AiProvider {
         return out.toString();
     }
 
+    private String extractStreamingChatText(String line) {
+        String data = sseData(line);
+        if (data.isEmpty() || "[DONE]".equals(data)) {
+            return "";
+        }
+        try {
+            JsonElement element = JsonParser.parseString(data);
+            if (!element.isJsonObject()) {
+                return "";
+            }
+            JsonObject event = element.getAsJsonObject();
+            if (!event.has("choices") || !event.get("choices").isJsonArray()
+                    || event.getAsJsonArray("choices").size() == 0) {
+                return "";
+            }
+            JsonObject choice = event.getAsJsonArray("choices").get(0).getAsJsonObject();
+            if (!choice.has("delta") || !choice.get("delta").isJsonObject()) {
+                return "";
+            }
+            JsonObject delta = choice.getAsJsonObject("delta");
+            if (delta.has("content") && !delta.get("content").isJsonNull()) {
+                return delta.get("content").getAsString();
+            }
+        } catch (Exception ignored) {
+            return "";
+        }
+        return "";
+    }
+
+    private String extractStreamingResponsesText(String line) {
+        String data = sseData(line);
+        if (data.isEmpty() || "[DONE]".equals(data)) {
+            return "";
+        }
+        try {
+            JsonElement element = JsonParser.parseString(data);
+            if (!element.isJsonObject()) {
+                return "";
+            }
+            JsonObject event = element.getAsJsonObject();
+            String type = event.has("type") && !event.get("type").isJsonNull()
+                    ? event.get("type").getAsString()
+                    : "";
+            if (!"response.output_text.delta".equals(type)
+                    && !"response.refusal.delta".equals(type)
+                    && !"output_text.delta".equals(type)) {
+                return "";
+            }
+            if (event.has("delta") && !event.get("delta").isJsonNull()) {
+                return event.get("delta").getAsString();
+            }
+        } catch (Exception ignored) {
+            return "";
+        }
+        return "";
+    }
+
     private String valueOr(String value, String fallback) {
         return value == null || value.trim().isEmpty() ? fallback : value.trim();
     }
@@ -139,5 +259,16 @@ public final class OpenAiProvider implements AiProvider {
             out = out.substring(0, out.length() - 1);
         }
         return out;
+    }
+
+    private String sseData(String line) {
+        if (line == null) {
+            return "";
+        }
+        String trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) {
+            return "";
+        }
+        return trimmed.substring("data:".length()).trim();
     }
 }

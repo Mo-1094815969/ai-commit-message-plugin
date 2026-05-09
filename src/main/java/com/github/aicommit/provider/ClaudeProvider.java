@@ -1,11 +1,14 @@
 package com.github.aicommit.provider;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.Consumer;
 
 public final class ClaudeProvider implements AiProvider {
     private static final String DEFAULT_BASE_URL = "https://api.anthropic.com";
@@ -47,6 +50,75 @@ public final class ClaudeProvider implements AiProvider {
             }
         }
         return out.toString();
+    }
+
+    @Override
+    public String generateStreaming(String prompt, EffectiveProviderConfig config, int timeoutSeconds,
+                                    Consumer<String> chunkConsumer)
+            throws IOException, InterruptedException {
+        JsonObject body = new JsonObject();
+        body.addProperty("model", valueOr(config.getModel(), "claude-sonnet-4-5"));
+        body.addProperty("max_tokens", 1024);
+        body.addProperty("stream", true);
+
+        JsonArray messages = new JsonArray();
+        JsonObject message = new JsonObject();
+        message.addProperty("role", "user");
+        message.addProperty("content", prompt);
+        messages.add(message);
+        body.add("messages", messages);
+
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put("x-api-key", config.getApiKey());
+        headers.put("anthropic-version", "2023-06-01");
+
+        StringBuilder out = new StringBuilder();
+        String url = trimTrailingSlash(valueOr(config.getBaseUrl(), DEFAULT_BASE_URL)) + "/v1/messages";
+        new JsonHttp().postJsonLines(url, body, headers, timeoutSeconds, line -> {
+            String text = extractStreamingText(line);
+            if (!text.isEmpty()) {
+                out.append(text);
+                if (chunkConsumer != null) {
+                    chunkConsumer.accept(text);
+                }
+            }
+        });
+        return out.toString();
+    }
+
+    private String extractStreamingText(String line) {
+        String data = sseData(line);
+        if (data.isEmpty()) {
+            return "";
+        }
+        try {
+            JsonElement element = JsonParser.parseString(data);
+            if (!element.isJsonObject()) {
+                return "";
+            }
+            JsonObject event = element.getAsJsonObject();
+            if (!event.has("delta") || !event.get("delta").isJsonObject()) {
+                return "";
+            }
+            JsonObject delta = event.getAsJsonObject("delta");
+            if (delta.has("text") && !delta.get("text").isJsonNull()) {
+                return delta.get("text").getAsString();
+            }
+        } catch (Exception ignored) {
+            return "";
+        }
+        return "";
+    }
+
+    private String sseData(String line) {
+        if (line == null) {
+            return "";
+        }
+        String trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) {
+            return "";
+        }
+        return trimmed.substring("data:".length()).trim();
     }
 
     private String valueOr(String value, String fallback) {

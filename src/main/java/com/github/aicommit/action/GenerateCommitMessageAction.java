@@ -34,12 +34,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 public final class GenerateCommitMessageAction extends AnAction implements DumbAware {
     private static final Logger LOG = Logger.getInstance(GenerateCommitMessageAction.class);
     private static final String NOTIFICATION_GROUP = "AI Commit Message Notifications";
     private static final Set<String> IN_FLIGHT_PROJECTS = ConcurrentHashMap.newKeySet();
     private static final Icon ACTION_ICON = IconLoader.getIcon("/icons/ai-commit.svg", GenerateCommitMessageAction.class);
+    private static final long STREAM_UPDATE_INTERVAL_MILLIS = 120;
 
     private final SelectedChangesCollector changesCollector = new SelectedChangesCollector();
 
@@ -98,8 +100,19 @@ public final class GenerateCommitMessageAction extends AnAction implements DumbA
                         + ", source=" + config.getSource()
                         + ", model=" + safeModel(config.getModel())
                         + ", promptLength=" + prompt.length());
-                String raw = provider.generate(prompt, config, settings.timeoutSeconds);
-                String cleaned = new CommitMessageCleaner().clean(raw);
+                CommitMessageCleaner cleaner = new CommitMessageCleaner();
+                StringBuilder streamed = new StringBuilder();
+                AtomicLong lastUiUpdateMillis = new AtomicLong(0);
+                String raw = provider.generateStreaming(prompt, config, settings.timeoutSeconds, chunk -> {
+                    if (completed.get()) {
+                        return;
+                    }
+                    synchronized (streamed) {
+                        streamed.append(chunk);
+                    }
+                    maybeUpdatePartialMessage(commitMessagePanel, cleaner, streamed, lastUiUpdateMillis);
+                });
+                String cleaned = cleaner.clean(raw);
                 if (cleaned.isEmpty()) {
                     throw new IllegalStateException("AI returned an empty commit message.");
                 }
@@ -151,6 +164,24 @@ public final class GenerateCommitMessageAction extends AnAction implements DumbA
 
     private void restoreIcon(Presentation presentation) {
         presentation.setIcon(ACTION_ICON);
+    }
+
+    private void maybeUpdatePartialMessage(CommitMessageI panel, CommitMessageCleaner cleaner, StringBuilder raw,
+                                           AtomicLong lastUiUpdateMillis) {
+        long now = System.currentTimeMillis();
+        long last = lastUiUpdateMillis.get();
+        if (now - last < STREAM_UPDATE_INTERVAL_MILLIS || !lastUiUpdateMillis.compareAndSet(last, now)) {
+            return;
+        }
+        String snapshot;
+        synchronized (raw) {
+            snapshot = raw.toString();
+        }
+        String partial = cleaner.cleanPartial(snapshot);
+        if (partial.isEmpty()) {
+            return;
+        }
+        ApplicationManager.getApplication().invokeLater(() -> panel.setCommitMessage(partial));
     }
 
     private void writeFailure(CommitMessageI panel, String message) {

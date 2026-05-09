@@ -18,4 +18,18 @@ public class CommitMessageCleanerTest {
         String cleaned = new CommitMessageCleaner().clean(raw);
         Assert.assertEquals("fix: Handle timeout\n\nWrite error to input", cleaned);
     }
+
+    @Test
+    public void extractsPartialCommitTagContent() {
+        String raw = "analysis\n<commit>\nfeat(skill): Add built-in";
+        String cleaned = new CommitMessageCleaner().cleanPartial(raw);
+        Assert.assertEquals("feat(skill): Add built-in", cleaned);
+    }
+
+    @Test
+    public void convertsPartialLiteralNewlines() {
+        String raw = "<commit>fix(ui): Restore icon\\n\\n- Reset icon after success";
+        String cleaned = new CommitMessageCleaner().cleanPartial(raw);
+        Assert.assertEquals("fix(ui): Restore icon\n\n- Reset icon after success", cleaned);
+    }
 }

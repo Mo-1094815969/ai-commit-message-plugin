@@ -25,4 +25,25 @@ public final class CommitMessageCleaner {
         value = value.replaceAll("(?i)generated with .*", "").trim();
         return value.replaceAll("\\n{3,}", "\n\n").trim();
     }
+
+    public String cleanPartial(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String value = raw;
+        int start = value.indexOf(START);
+        if (start >= 0) {
+            int contentStart = start + START.length();
+            int end = value.indexOf(END, contentStart);
+            value = end > contentStart ? value.substring(contentStart, end) : value.substring(contentStart);
+        }
+        if (value.startsWith("```")) {
+            int firstNewline = value.indexOf('\n');
+            if (firstNewline >= 0) {
+                value = value.substring(firstNewline + 1);
+            }
+        }
+        value = value.replace("\\n", "\n");
+        return value.replaceAll("\\n{3,}", "\n\n").trim();
+    }
 }
