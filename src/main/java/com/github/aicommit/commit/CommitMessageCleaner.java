@@ -32,11 +32,13 @@ public final class CommitMessageCleaner {
         }
         String value = raw;
         int start = value.indexOf(START);
-        if (start >= 0) {
-            int contentStart = start + START.length();
-            int end = value.indexOf(END, contentStart);
-            value = end > contentStart ? value.substring(contentStart, end) : value.substring(contentStart);
+        if (start < 0) {
+            return "";
         }
+        int contentStart = start + START.length();
+        int end = value.indexOf(END, contentStart);
+        value = end > contentStart ? value.substring(contentStart, end) : value.substring(contentStart);
+        value = stripTrailingPrefix(value, END);
         if (value.startsWith("```")) {
             int firstNewline = value.indexOf('\n');
             if (firstNewline >= 0) {
@@ -45,5 +47,15 @@ public final class CommitMessageCleaner {
         }
         value = value.replace("\\n", "\n");
         return value.replaceAll("\\n{3,}", "\n\n").trim();
+    }
+
+    private String stripTrailingPrefix(String value, String token) {
+        int max = Math.min(value.length(), token.length() - 1);
+        for (int len = max; len > 0; len--) {
+            if (token.startsWith(value.substring(value.length() - len))) {
+                return value.substring(0, value.length() - len);
+            }
+        }
+        return value;
     }
 }

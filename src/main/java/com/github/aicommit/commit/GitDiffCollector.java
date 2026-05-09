@@ -15,6 +15,7 @@ public final class GitDiffCollector {
     private static final int MAX_TOTAL_DIFF_LENGTH = 12000;
     private static final int MAX_NEW_FILE_CHARS = 1200;
     private static final int MAX_CHANGED_LINES = 80;
+    private static final int MAX_LCS_CELLS = 250000;
 
     public String collect(@NotNull Collection<Change> changes, @NotNull SensitiveDiffFilter filter) {
         StringBuilder diff = new StringBuilder();
@@ -83,12 +84,52 @@ public final class GitDiffCollector {
             diff.append("[large file content omitted]\n");
             return;
         }
-        diff.append(simpleLineDiff(before, after));
+        diff.append(lineDiff(before, after));
     }
 
-    private String simpleLineDiff(String before, String after) {
+    static String lineDiff(String before, String after) {
         String[] beforeLines = before.split("\\R", -1);
         String[] afterLines = after.split("\\R", -1);
+        long lcsCells = (long) (beforeLines.length + 1) * (afterLines.length + 1);
+        if (lcsCells > MAX_LCS_CELLS) {
+            return positionalLineDiff(beforeLines, afterLines);
+        }
+
+        int[][] lcs = new int[beforeLines.length + 1][afterLines.length + 1];
+        for (int i = beforeLines.length - 1; i >= 0; i--) {
+            for (int j = afterLines.length - 1; j >= 0; j--) {
+                if (beforeLines[i].equals(afterLines[j])) {
+                    lcs[i][j] = lcs[i + 1][j + 1] + 1;
+                } else {
+                    lcs[i][j] = Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+                }
+            }
+        }
+
+        StringBuilder out = new StringBuilder();
+        int i = 0;
+        int j = 0;
+        int shown = 0;
+        while ((i < beforeLines.length || j < afterLines.length) && shown < MAX_CHANGED_LINES) {
+            if (i < beforeLines.length && j < afterLines.length && beforeLines[i].equals(afterLines[j])) {
+                i++;
+                j++;
+            } else if (j >= afterLines.length
+                    || (i < beforeLines.length && lcs[i + 1][j] >= lcs[i][j + 1])) {
+                shown = appendDiffLine(out, "- ", beforeLines[i], shown);
+                i++;
+            } else {
+                shown = appendDiffLine(out, "+ ", afterLines[j], shown);
+                j++;
+            }
+        }
+        if (i < beforeLines.length || j < afterLines.length) {
+            out.append("... changed lines truncated\n");
+        }
+        return out.toString();
+    }
+
+    private static String positionalLineDiff(String[] beforeLines, String[] afterLines) {
         int max = Math.max(beforeLines.length, afterLines.length);
         int shown = 0;
         StringBuilder out = new StringBuilder();
@@ -96,19 +137,21 @@ public final class GitDiffCollector {
             String left = i < beforeLines.length ? beforeLines[i] : "";
             String right = i < afterLines.length ? afterLines[i] : "";
             if (!left.equals(right)) {
-                if (!left.isEmpty()) {
-                    out.append("- ").append(left).append("\n");
-                    shown++;
-                }
-                if (!right.isEmpty() && shown < MAX_CHANGED_LINES) {
-                    out.append("+ ").append(right).append("\n");
-                    shown++;
-                }
+                shown = appendDiffLine(out, "- ", left, shown);
+                shown = appendDiffLine(out, "+ ", right, shown);
             }
         }
         if (shown >= MAX_CHANGED_LINES) {
             out.append("... changed lines truncated\n");
         }
         return out.toString();
+    }
+
+    private static int appendDiffLine(StringBuilder out, String prefix, String line, int shown) {
+        if (shown >= MAX_CHANGED_LINES || line == null || line.isEmpty()) {
+            return shown;
+        }
+        out.append(prefix).append(line).append("\n");
+        return shown + 1;
     }
 }

@@ -12,6 +12,7 @@ import java.util.function.Consumer;
 
 public final class ClaudeProvider implements AiProvider {
     private static final String DEFAULT_BASE_URL = "https://api.anthropic.com";
+    private static final int DEFAULT_MAX_TOKENS = 1536;
 
     @Override
     public ProviderKind kind() {
@@ -23,7 +24,8 @@ public final class ClaudeProvider implements AiProvider {
             throws IOException, InterruptedException {
         JsonObject body = new JsonObject();
         body.addProperty("model", valueOr(config.getModel(), "claude-sonnet-4-5"));
-        body.addProperty("max_tokens", 1024);
+        body.addProperty("max_tokens", DEFAULT_MAX_TOKENS);
+        body.addProperty("temperature", 0.0);
 
         JsonArray messages = new JsonArray();
         JsonObject message = new JsonObject();
@@ -58,7 +60,8 @@ public final class ClaudeProvider implements AiProvider {
             throws IOException, InterruptedException {
         JsonObject body = new JsonObject();
         body.addProperty("model", valueOr(config.getModel(), "claude-sonnet-4-5"));
-        body.addProperty("max_tokens", 1024);
+        body.addProperty("max_tokens", DEFAULT_MAX_TOKENS);
+        body.addProperty("temperature", 0.0);
         body.addProperty("stream", true);
 
         JsonArray messages = new JsonArray();
@@ -86,8 +89,8 @@ public final class ClaudeProvider implements AiProvider {
         return out.toString();
     }
 
-    private String extractStreamingText(String line) {
-        String data = sseData(line);
+    static String extractStreamingText(String eventData) {
+        String data = sseData(eventData);
         if (data.isEmpty()) {
             return "";
         }
@@ -110,13 +113,13 @@ public final class ClaudeProvider implements AiProvider {
         return "";
     }
 
-    private String sseData(String line) {
+    private static String sseData(String line) {
         if (line == null) {
             return "";
         }
         String trimmed = line.trim();
         if (!trimmed.startsWith("data:")) {
-            return "";
+            return trimmed;
         }
         return trimmed.substring("data:".length()).trim();
     }

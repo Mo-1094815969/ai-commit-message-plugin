@@ -16,7 +16,7 @@ Use this format:
 ```text
 type(scope): subject
 
-optional body
+body
 ```
 
 - Always include `type`, `scope`, and `subject`.
@@ -25,11 +25,18 @@ optional body
 - Keep the full header within 100 characters when possible.
 - Do not end `subject` with a period.
 - Do not use emoji, signatures, Co-Authored-By lines, issue footers, or explanatory notes outside the commit message.
-- Add a body only when the diff is complex, crosses several files, changes behavior in a non-obvious way, or needs impact/why context.
+- Always include a body. For single-file trivial changes, one bullet is sufficient. For multi-file diffs, write one bullet per logical change.
+- When the diff touches multiple files, multiple hunks, or multiple logical changes, prefer 1-7 bullets instead of a one-line summary.
 - Separate body from header with one blank line.
 - Prefer a `- ` bullet list for body content. Each bullet should describe one concrete change, reason, or impact.
 - Keep body bullets concise and within 100 characters when practical.
 - Do not use vague bullets such as "improve user experience" unless the exact behavior is named.
+- Use exact nouns from the diff when helpful, such as provider names, settings fields, UI controls, paths, or files.
+- When the diff changes numeric values (thresholds, timeouts, limits, sizes), mention both old and new values.
+- Name specific methods, classes, and fields that were added or modified.
+- If the diff changes behavior, mention the user-visible behavior or failure mode in at least one body bullet.
+- Keep the style stable across different models.
+- Prefer one header plus 1-7 bullets for non-trivial diffs; do not add commentary outside the commit message.
 
 ## Type Set
 
@@ -64,7 +71,7 @@ Avoid class names, method names, raw paths, and vague scopes like `core` unless 
 ## Body Detail
 
 When adding a body, make the bullets precise enough for a reviewer to understand the change without
-opening the diff. Prefer 2-4 bullets in this order:
+opening the diff. Prefer 1-7 bullets in this order:
 
 1. What changed in the main behavior or API.
 2. How important implementation pieces changed.
@@ -76,6 +83,8 @@ Good body bullets:
 - `- Add SSE parsing for Claude and Codex/OpenAI providers`
 - `- Throttle Commit Message input updates during generation`
 - `- Keep non-streaming generation as the provider fallback`
+- `- Read Codex relay base URL from local config before environment fallback`
+- `- Restore the toolbar icon after success, failure, and timeout paths`
 
 Weak body bullets:
 

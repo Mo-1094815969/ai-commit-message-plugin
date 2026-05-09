@@ -1,5 +1,6 @@
 package com.github.aicommit.settings;
 
+import com.github.aicommit.AiCommitBundle;
 import com.github.aicommit.skill.SkillInfo;
 import com.github.aicommit.skill.SkillScanner;
 import com.intellij.openapi.options.Configurable;
@@ -23,14 +24,16 @@ import javax.swing.JSpinner;
 import javax.swing.SpinnerNumberModel;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.FontMetrics;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 public final class AiCommitConfigurable implements Configurable {
-    private static final int SKILL_COMBO_WIDTH = 560;
-    private static final String SKILL_COMBO_PROTOTYPE =
-            "[Codex] built-in-git-commit-style - C:\\Users\\user\\.codex\\skills\\git-commit\\SKILL.md";
+    private static final int SKILL_COMBO_MIN_WIDTH = 420;
+    private static final int SKILL_COMBO_MAX_WIDTH = 980;
+    private static final int SKILL_COMBO_PADDING = 80;
 
     private ComboBox<String> uiLanguageCombo;
     private ComboBox<String> providerCombo;
@@ -69,7 +72,7 @@ public final class AiCommitConfigurable implements Configurable {
 
     @Override
     public @Nls String getDisplayName() {
-        return "AI Commit Message / AI 提交信息";
+        return AiCommitBundle.message("settings.displayName");
     }
 
     @Override
@@ -97,12 +100,12 @@ public final class AiCommitConfigurable implements Configurable {
         openaiWireApiCombo = new ComboBox<>(new String[]{"Chat Completions", "Responses"});
 
         refreshSkillsButton = new JButton();
-        refreshSkillsButton.addActionListener(event -> loadSkills(getCurrentProjectBasePath()));
+        refreshSkillsButton.addActionListener(event -> loadSkills(getCurrentProjectBasePath(), true));
         uiLanguageCombo.addActionListener(event -> {
             updateTexts();
-            loadSkills(getCurrentProjectBasePath());
+            loadSkills(getCurrentProjectBasePath(), false);
         });
-        providerCombo.addActionListener(event -> loadSkills(getCurrentProjectBasePath()));
+        providerCombo.addActionListener(event -> loadSkills(getCurrentProjectBasePath(), false));
 
         uiLanguageLabel = new JBLabel();
         providerLabel = new JBLabel();
@@ -122,7 +125,7 @@ public final class AiCommitConfigurable implements Configurable {
         openaiWireApiLabel = new JBLabel();
 
         applyStateToUi(state);
-        loadSkills(getCurrentProjectBasePath());
+        loadSkills(getCurrentProjectBasePath(), false);
         updateTexts();
 
         FormBuilder builder = FormBuilder.createFormBuilder()
@@ -217,30 +220,58 @@ public final class AiCommitConfigurable implements Configurable {
         return state;
     }
 
-    private void loadSkills(String projectBasePath) {
-        String selected = skillCombo == null ? "" : stringValue(skillCombo.getSelectedItem());
+    private void loadSkills(String projectBasePath, boolean forceRefresh) {
+        String selectedLabel = skillCombo == null ? "" : stringValue(skillCombo.getSelectedItem());
+        String selectedRef = skillLabelsToRefs.getOrDefault(selectedLabel, "");
         skillLabelsToRefs.clear();
         skillLabelsToRefs.put(builtInSkillLabel(), "");
         if (skillCombo != null) {
             skillCombo.removeAllItems();
             skillCombo.addItem(builtInSkillLabel());
         }
-        List<SkillInfo> skills = new SkillScanner().scan(projectBasePath, selectedProviderId());
+        List<String> labels = new ArrayList<>();
+        labels.add(builtInSkillLabel());
+        List<SkillInfo> skills = new SkillScanner().scan(projectBasePath, selectedProviderId(), forceRefresh);
         for (SkillInfo skill : skills) {
             String label = skillProviderLabel(skill) + " " + skill.getName() + " - " + skill.getPath();
             skillLabelsToRefs.put(label, skill.getPath());
+            labels.add(label);
             if (skillCombo != null) {
                 skillCombo.addItem(label);
             }
         }
-        if (skillCombo != null && skillLabelsToRefs.containsKey(selected)) {
-            skillCombo.setSelectedItem(selected);
-        }
         if (skillCombo != null) {
-            configureSkillComboSize();
+            String selected = selectSkillRef(selectedRef);
+            if (selected != null && !labels.contains(selected)) {
+                labels.add(selected);
+            }
+            configureSkillComboSize(labels);
             skillCombo.revalidate();
             skillCombo.repaint();
         }
+    }
+
+    private void loadSkills(String projectBasePath) {
+        loadSkills(projectBasePath, false);
+    }
+
+    private String selectSkillRef(String skillRef) {
+        if (skillRef == null || skillRef.trim().isEmpty()) {
+            String label = builtInSkillLabel();
+            skillCombo.setSelectedItem(label);
+            return label;
+        }
+        for (Map.Entry<String, String> entry : skillLabelsToRefs.entrySet()) {
+            if (skillRef.equals(entry.getValue())) {
+                skillCombo.setSelectedItem(entry.getKey());
+                return entry.getKey();
+            }
+        }
+        String label = "(Configured) " + skillRef;
+        skillLabelsToRefs.put(label, skillRef);
+        skillCombo.addItem(label);
+        skillCombo.setSelectedItem(label);
+        return label;
     }
 
     private void loadProviderItems(String selectedProviderId) {
@@ -248,7 +279,7 @@ public final class AiCommitConfigurable implements Configurable {
         providerLabelsToIds.clear();
         providerCombo.removeAllItems();
         addProviderItem(providerAutoLabel(), AiCommitSettings.PROVIDER_AUTO);
-        addProviderItem("Claude", AiCommitSettings.PROVIDER_CLAUDE);
+        addProviderItem(claudeProviderLabel(), AiCommitSettings.PROVIDER_CLAUDE);
         addProviderItem(codexProviderLabel(), AiCommitSettings.PROVIDER_OPENAI);
         for (Map.Entry<String, String> entry : providerLabelsToIds.entrySet()) {
             if (selected.equals(entry.getValue())) {
@@ -280,8 +311,8 @@ public final class AiCommitConfigurable implements Configurable {
         priorityHintLabel.setText(zh()
                 ? "手动配置优先级最高。留空时依次读取本地 Claude/Codex 配置、cc-switch 配置和环境变量。"
                 : "Manual provider config has highest priority. Empty fields fall back to local Claude/Codex config, cc-switch, then environment variables.");
-        claudeSectionLabel.setText(zh() ? "Claude / Claude 中转站" : "Claude / Claude relay");
-        claudeApiKeyLabel.setText(zh() ? "API Key / Auth Token" : "API Key / Auth Token");
+        claudeSectionLabel.setText(claudeProviderLabel());
+        claudeApiKeyLabel.setText("API Key / Auth Token");
         claudeBaseUrlLabel.setText(zh() ? "Base URL（例如 https://example.com）" : "Base URL, for example https://example.com");
         claudeModelLabel.setText(zh() ? "模型" : "Model");
         openaiSectionLabel.setText(codexProviderLabel());
@@ -300,6 +331,10 @@ public final class AiCommitConfigurable implements Configurable {
 
     private String providerAutoLabel() {
         return zh() ? "自动选择" : "Auto";
+    }
+
+    private String claudeProviderLabel() {
+        return zh() ? "Claude / Claude 兼容中转站" : "Claude / Claude relay";
     }
 
     private String codexProviderLabel() {
@@ -326,30 +361,44 @@ public final class AiCommitConfigurable implements Configurable {
     }
 
     private void configureSkillComboSize() {
-        skillCombo.setPrototypeDisplayValue(SKILL_COMBO_PROTOTYPE);
+        List<String> labels = new ArrayList<>();
+        labels.add(builtInSkillLabel());
+        configureSkillComboSize(labels);
+    }
+
+    private void configureSkillComboSize(List<String> labels) {
+        String widest = widestLabel(labels);
+        skillCombo.setPrototypeDisplayValue(widest);
         Dimension preferred = skillCombo.getPreferredSize();
         int height = preferred == null || preferred.height <= 0 ? 30 : preferred.height;
-        Dimension size = new Dimension(SKILL_COMBO_WIDTH, height);
+        int measured = measuredTextWidth(widest) + SKILL_COMBO_PADDING;
+        int width = Math.min(Math.max(measured, SKILL_COMBO_MIN_WIDTH), SKILL_COMBO_MAX_WIDTH);
+        Dimension size = new Dimension(width, height);
         skillCombo.setMinimumSize(size);
         skillCombo.setPreferredSize(size);
         skillCombo.setMaximumRowCount(12);
     }
 
-    private void selectSkill(String skillRef) {
-        if (skillRef == null || skillRef.trim().isEmpty()) {
-            skillCombo.setSelectedItem(builtInSkillLabel());
-            return;
+    private String widestLabel(List<String> labels) {
+        String widest = builtInSkillLabel();
+        if (labels == null) {
+            return widest;
         }
-        for (Map.Entry<String, String> entry : skillLabelsToRefs.entrySet()) {
-            if (skillRef.equals(entry.getValue())) {
-                skillCombo.setSelectedItem(entry.getKey());
-                return;
+        for (String label : labels) {
+            if (label != null && label.length() > widest.length()) {
+                widest = label;
             }
         }
-        String label = "(Configured) " + skillRef;
-        skillLabelsToRefs.put(label, skillRef);
-        skillCombo.addItem(label);
-        skillCombo.setSelectedItem(label);
+        return widest;
+    }
+
+    private int measuredTextWidth(String value) {
+        FontMetrics metrics = skillCombo.getFontMetrics(skillCombo.getFont());
+        return metrics == null ? 0 : metrics.stringWidth(value == null ? "" : value);
+    }
+
+    private void selectSkill(String skillRef) {
+        selectSkillRef(skillRef);
     }
 
     private String getCurrentProjectBasePath() {

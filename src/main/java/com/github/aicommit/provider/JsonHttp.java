@@ -66,8 +66,36 @@ public final class JsonHttp {
                 });
                 throw new IOException("HTTP " + response.statusCode() + ": " + shorten(error.toString()));
             }
-            lines.forEach(lineConsumer);
+            StringBuilder eventData = new StringBuilder();
+            lines.forEach(line -> acceptSseLine(line, eventData, lineConsumer));
+            flushSseEvent(eventData, lineConsumer);
         }
+    }
+
+    private void acceptSseLine(String line, StringBuilder eventData, Consumer<String> lineConsumer) {
+        if (line == null) {
+            return;
+        }
+        String trimmed = line.trim();
+        if (trimmed.isEmpty()) {
+            flushSseEvent(eventData, lineConsumer);
+            return;
+        }
+        if (trimmed.startsWith(":") || !trimmed.startsWith("data:")) {
+            return;
+        }
+        if (eventData.length() > 0) {
+            eventData.append('\n');
+        }
+        eventData.append(trimmed.substring("data:".length()).trim());
+    }
+
+    private void flushSseEvent(StringBuilder eventData, Consumer<String> lineConsumer) {
+        if (eventData.length() == 0) {
+            return;
+        }
+        lineConsumer.accept(eventData.toString());
+        eventData.setLength(0);
     }
 
     private String shorten(String text) {

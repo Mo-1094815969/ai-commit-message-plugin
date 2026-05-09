@@ -8,10 +8,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 public final class SkillScanner {
@@ -20,17 +23,30 @@ public final class SkillScanner {
     private static final String PROVIDER_AUTO = "auto";
     private static final String PROVIDER_CLAUDE = "claude";
     private static final String PROVIDER_CODEX = "openai";
+    private static final Map<ScanKey, List<SkillInfo>> SCAN_CACHE = new ConcurrentHashMap<>();
 
     public List<SkillInfo> scan(String projectBasePath) {
         return scan(projectBasePath, PROVIDER_AUTO);
     }
 
     public List<SkillInfo> scan(String projectBasePath, String providerId) {
+        return scan(projectBasePath, providerId, false);
+    }
+
+    public List<SkillInfo> scan(String projectBasePath, String providerId, boolean forceRefresh) {
+        ScanKey key = new ScanKey(projectBasePath, providerId);
+        if (!forceRefresh) {
+            List<SkillInfo> cached = SCAN_CACHE.get(key);
+            if (cached != null) {
+                return new ArrayList<>(cached);
+            }
+        }
         List<SkillInfo> result = new ArrayList<>();
         for (SkillRoot root : candidateRoots(projectBasePath, providerId)) {
             collectSkills(root, result);
         }
         result.sort(Comparator.comparing(SkillInfo::getName, String.CASE_INSENSITIVE_ORDER));
+        SCAN_CACHE.put(key, Collections.unmodifiableList(new ArrayList<>(result)));
         return result;
     }
 
@@ -188,6 +204,35 @@ public final class SkillScanner {
         @Override
         public int hashCode() {
             return 31 * path.hashCode() + providerId.hashCode();
+        }
+    }
+
+    private static final class ScanKey {
+        private final String projectBasePath;
+        private final String providerId;
+
+        private ScanKey(String projectBasePath, String providerId) {
+            this.projectBasePath = projectBasePath == null ? "" : projectBasePath.trim();
+            this.providerId = providerId == null || providerId.trim().isEmpty()
+                    ? PROVIDER_AUTO
+                    : providerId.trim().toLowerCase();
+        }
+
+        @Override
+        public boolean equals(Object object) {
+            if (this == object) {
+                return true;
+            }
+            if (!(object instanceof ScanKey)) {
+                return false;
+            }
+            ScanKey other = (ScanKey) object;
+            return projectBasePath.equals(other.projectBasePath) && providerId.equals(other.providerId);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * projectBasePath.hashCode() + providerId.hashCode();
         }
     }
 }

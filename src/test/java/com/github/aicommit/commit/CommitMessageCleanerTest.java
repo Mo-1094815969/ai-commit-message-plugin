@@ -32,4 +32,18 @@ public class CommitMessageCleanerTest {
         String cleaned = new CommitMessageCleaner().cleanPartial(raw);
         Assert.assertEquals("fix(ui): Restore icon\n\n- Reset icon after success", cleaned);
     }
+
+    @Test
+    public void hidesContentBeforeCommitTagInPartialMode() {
+        String raw = "analysis before tag\n<commit>feat(ui): Restore icon";
+        String cleaned = new CommitMessageCleaner().cleanPartial(raw);
+        Assert.assertEquals("feat(ui): Restore icon", cleaned);
+    }
+
+    @Test
+    public void trimsPartialEndTagFragments() {
+        String raw = "<commit>fix(ui): Restore icon\n\n- Reset icon after success\n</comm";
+        String cleaned = new CommitMessageCleaner().cleanPartial(raw);
+        Assert.assertEquals("fix(ui): Restore icon\n\n- Reset icon after success", cleaned);
+    }
 }

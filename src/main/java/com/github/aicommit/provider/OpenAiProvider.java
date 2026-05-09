@@ -12,6 +12,8 @@ import java.util.function.Consumer;
 
 public final class OpenAiProvider implements AiProvider {
     private static final String DEFAULT_BASE_URL = "https://api.openai.com";
+    private static final int DEFAULT_MAX_TOKENS = 1536;
+    private static final String DIFF_SECTION_MARKER = "## Selected git diff";
 
     @Override
     public ProviderKind kind() {
@@ -41,14 +43,10 @@ public final class OpenAiProvider implements AiProvider {
             throws IOException, InterruptedException {
         JsonObject body = new JsonObject();
         body.addProperty("model", valueOr(config.getModel(), "gpt-4.1-mini"));
-        body.addProperty("temperature", 0.2);
+        body.addProperty("temperature", 0.3);
+        body.addProperty("max_tokens", DEFAULT_MAX_TOKENS);
 
-        JsonArray messages = new JsonArray();
-        JsonObject user = new JsonObject();
-        user.addProperty("role", "user");
-        user.addProperty("content", prompt);
-        messages.add(user);
-        body.add("messages", messages);
+        body.add("messages", buildChatMessages(prompt));
 
         Map<String, String> headers = authHeaders(config.getApiKey());
         String url = endpointUrl(config.getBaseUrl(), "/chat/completions");
@@ -60,7 +58,12 @@ public final class OpenAiProvider implements AiProvider {
             throws IOException, InterruptedException {
         JsonObject body = new JsonObject();
         body.addProperty("model", valueOr(config.getModel(), "gpt-4.1-mini"));
-        body.addProperty("input", prompt);
+        body.addProperty("max_output_tokens", DEFAULT_MAX_TOKENS);
+        String[] parts = splitPrompt(prompt);
+        if (!parts[0].isEmpty()) {
+            body.addProperty("instructions", parts[0]);
+        }
+        body.addProperty("input", parts[1]);
 
         Map<String, String> headers = authHeaders(config.getApiKey());
         String url = endpointUrl(config.getBaseUrl(), "/responses");
@@ -73,15 +76,10 @@ public final class OpenAiProvider implements AiProvider {
             throws IOException, InterruptedException {
         JsonObject body = new JsonObject();
         body.addProperty("model", valueOr(config.getModel(), "gpt-4.1-mini"));
-        body.addProperty("temperature", 0.2);
+        body.addProperty("temperature", 0.3);
+        body.addProperty("max_tokens", DEFAULT_MAX_TOKENS);
         body.addProperty("stream", true);
-
-        JsonArray messages = new JsonArray();
-        JsonObject user = new JsonObject();
-        user.addProperty("role", "user");
-        user.addProperty("content", prompt);
-        messages.add(user);
-        body.add("messages", messages);
+        body.add("messages", buildChatMessages(prompt));
 
         StringBuilder out = new StringBuilder();
         new JsonHttp().postJsonLines(endpointUrl(config.getBaseUrl(), "/chat/completions"), body,
@@ -102,8 +100,13 @@ public final class OpenAiProvider implements AiProvider {
             throws IOException, InterruptedException {
         JsonObject body = new JsonObject();
         body.addProperty("model", valueOr(config.getModel(), "gpt-4.1-mini"));
-        body.addProperty("input", prompt);
+        body.addProperty("max_output_tokens", DEFAULT_MAX_TOKENS);
         body.addProperty("stream", true);
+        String[] parts = splitPrompt(prompt);
+        if (!parts[0].isEmpty()) {
+            body.addProperty("instructions", parts[0]);
+        }
+        body.addProperty("input", parts[1]);
 
         StringBuilder out = new StringBuilder();
         new JsonHttp().postJsonLines(endpointUrl(config.getBaseUrl(), "/responses"), body,
@@ -169,8 +172,8 @@ public final class OpenAiProvider implements AiProvider {
         return out.toString();
     }
 
-    private String extractStreamingChatText(String line) {
-        String data = sseData(line);
+    static String extractStreamingChatText(String eventData) {
+        String data = sseData(eventData);
         if (data.isEmpty() || "[DONE]".equals(data)) {
             return "";
         }
@@ -198,8 +201,8 @@ public final class OpenAiProvider implements AiProvider {
         return "";
     }
 
-    private String extractStreamingResponsesText(String line) {
-        String data = sseData(line);
+    static String extractStreamingResponsesText(String eventData) {
+        String data = sseData(eventData);
         if (data.isEmpty() || "[DONE]".equals(data)) {
             return "";
         }
@@ -228,6 +231,30 @@ public final class OpenAiProvider implements AiProvider {
 
     private String valueOr(String value, String fallback) {
         return value == null || value.trim().isEmpty() ? fallback : value.trim();
+    }
+
+    private String[] splitPrompt(String prompt) {
+        int idx = prompt.indexOf(DIFF_SECTION_MARKER);
+        if (idx > 0) {
+            return new String[]{prompt.substring(0, idx).trim(), prompt.substring(idx).trim()};
+        }
+        return new String[]{"", prompt};
+    }
+
+    private JsonArray buildChatMessages(String prompt) {
+        JsonArray messages = new JsonArray();
+        String[] parts = splitPrompt(prompt);
+        if (!parts[0].isEmpty()) {
+            JsonObject system = new JsonObject();
+            system.addProperty("role", "system");
+            system.addProperty("content", parts[0]);
+            messages.add(system);
+        }
+        JsonObject user = new JsonObject();
+        user.addProperty("role", "user");
+        user.addProperty("content", parts[0].isEmpty() ? prompt : parts[1]);
+        messages.add(user);
+        return messages;
     }
 
     private Map<String, String> authHeaders(String apiKey) {
@@ -261,13 +288,13 @@ public final class OpenAiProvider implements AiProvider {
         return out;
     }
 
-    private String sseData(String line) {
+    private static String sseData(String line) {
         if (line == null) {
             return "";
         }
         String trimmed = line.trim();
         if (!trimmed.startsWith("data:")) {
-            return "";
+            return trimmed;
         }
         return trimmed.substring("data:".length()).trim();
     }

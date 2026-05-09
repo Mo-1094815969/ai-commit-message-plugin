@@ -1,13 +1,31 @@
 <idea-plugin>
     <id>com.github.aicommit.message.generator</id>
-    <name>AI Commit Message Generator</name>
+    <name>AI Commit Message</name>
     <vendor>Mo</vendor>
 
     <resource-bundle>messages.AiCommitBundle</resource-bundle>
 
     <description><![CDATA[
-        <p>Generate Git commit messages from selected files in the JetBrains Commit tool window.</p>
-        <p>Supports Claude and Codex/OpenAI-compatible relays, read-only cc-switch configuration, environment fallback, and provider-specific local Skills.</p>
+        <p><img src="https://raw.githubusercontent.com/Mo-1094815969/ai-commit-message-plugin/main/src/main/resources/META-INF/setting.png" alt="AI Commit Message settings screenshot" width="760"/></p>
+        <p><img src="https://raw.githubusercontent.com/Mo-1094815969/ai-commit-message-plugin/main/src/main/resources/META-INF/commit.png" alt="AI Commit Message commit screenshot" width="760"/></p>
+        <p><b>English</b></p>
+        <p>Generate polished Git commit messages from the files already selected in the JetBrains Commit tool window.</p>
+        <ul>
+            <li>Configuration path: <code>Settings / Preferences | Tools | AI Commit Message</code>.</li>
+            <li>Writes the result directly into the Commit Message field.</li>
+            <li>Supports Claude and Codex/OpenAI-compatible relays, including local config discovery and cc-switch.</li>
+            <li>Includes a built-in commitlint-style <code>git-commit</code> Skill plus provider-specific local Skills.</li>
+            <li>Offers a Chinese/English settings UI, streaming updates, and sensitive-path filtering.</li>
+        </ul>
+        <p><b>中文</b></p>
+        <p>根据 JetBrains Commit 工具窗口中已选择的文件，生成更完整、更规范的 Git commit message。</p>
+        <ul>
+            <li>将结果直接写入 Commit Message 输入框。</li>
+            <li>支持 Claude 和 Codex/OpenAI 兼容中转站，并支持读取本地配置与 cc-switch。</li>
+            <li>内置 commitlint 风格的 <code>git-commit</code> Skill，同时支持按提供方扫描本地 Skills。</li>
+            <li>提供中英双语设置界面、流式输出和敏感路径过滤。</li>
+            <li>配置入口：<code>Settings / Preferences | Tools | AI Commit Message</code>。</li>
+        </ul>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
@@ -17,17 +35,17 @@
         <applicationConfigurable
                 instance="com.github.aicommit.settings.AiCommitConfigurable"
                 id="ai.commit.settings"
-                displayName="AI Commit Message / AI 提交信息"/>
+                displayName="AI Commit Message"/>
         <notificationGroup id="AI Commit Message Notifications" displayType="BALLOON"/>
     </extensions>
 
     <actions>
         <action id="AiCommit.GenerateCommitMessageAction"
                 class="com.github.aicommit.action.GenerateCommitMessageAction"
-                text="AI Generate Commit Message"
-                description="Generate commit message from selected files using AI"
+                text="AI Commit Message"
+                description="Generate commit message"
                 icon="/icons/ai-commit.svg">
-            <add-to-group group-id="Vcs.MessageActionGroup" anchor="last"/>
+            <add-to-group group-id="Vcs.MessageActionGroup" anchor="first"/>
         </action>
     </actions>
 </idea-plugin>

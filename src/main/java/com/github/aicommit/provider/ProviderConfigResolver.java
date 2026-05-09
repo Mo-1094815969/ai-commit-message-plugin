@@ -24,23 +24,12 @@ public final class ProviderConfigResolver {
     private static final Logger LOG = Logger.getInstance(ProviderConfigResolver.class);
 
     public EffectiveProviderConfig resolve(AiCommitSettings.State state) {
+        ResolutionContext context = loadContext();
         ProviderKind selected = ProviderKind.fromId(state.provider);
         if (selected != null) {
-            EffectiveProviderConfig manual = manualConfig(selected, state);
-            if (hasApiKey(manual)) {
-                return manual;
-            }
-            EffectiveProviderConfig local = localToolConfig(selected);
-            if (hasApiKey(local)) {
-                return local;
-            }
-            EffectiveProviderConfig ccSwitch = ccSwitchConfig(selected);
-            if (hasApiKey(ccSwitch)) {
-                return ccSwitch;
-            }
-            EffectiveProviderConfig env = envConfig(selected);
-            if (hasApiKey(env)) {
-                return env;
+            EffectiveProviderConfig config = resolveKind(selected, state, context);
+            if (hasApiKey(config)) {
+                return config;
             }
             throw new IllegalStateException("No API key found for provider: " + selected.id());
         }
@@ -52,13 +41,13 @@ public final class ProviderConfigResolver {
             }
         }
         for (ProviderKind kind : supportedKinds()) {
-            EffectiveProviderConfig local = localToolConfig(kind);
+            EffectiveProviderConfig local = localToolConfig(kind, context);
             if (hasApiKey(local)) {
                 return local;
             }
         }
-        for (ProviderKind kind : preferredCcSwitchKinds()) {
-            EffectiveProviderConfig ccSwitch = ccSwitchConfig(kind);
+        for (ProviderKind kind : preferredCcSwitchKinds(context)) {
+            EffectiveProviderConfig ccSwitch = ccSwitchConfig(kind, context);
             if (hasApiKey(ccSwitch)) {
                 return ccSwitch;
             }
@@ -70,6 +59,31 @@ public final class ProviderConfigResolver {
             }
         }
         throw new IllegalStateException("No AI provider is configured. Add a manual API key, cc-switch provider, or environment variable.");
+    }
+
+    private EffectiveProviderConfig resolveKind(ProviderKind kind, AiCommitSettings.State state,
+                                                ResolutionContext context) {
+        for (EffectiveProviderConfig config : Arrays.asList(
+                manualConfig(kind, state),
+                localToolConfig(kind, context),
+                ccSwitchConfig(kind, context),
+                envConfig(kind))) {
+            if (hasApiKey(config)) {
+                return config;
+            }
+        }
+        return null;
+    }
+
+    private ResolutionContext loadContext() {
+        Path home = Paths.get(System.getProperty("user.home"));
+        Path codexConfigPath = home.resolve(".codex").resolve("config.toml");
+        return new ResolutionContext(
+                readJsonFile(home.resolve(".claude").resolve("settings.json")),
+                readJsonFile(home.resolve(".claude").resolve("settings.local.json")),
+                readToml(codexConfigPath),
+                readJsonFile(home.resolve(".cc-switch").resolve("settings.json")),
+                home.resolve(".cc-switch").resolve("cc-switch.db"));
     }
 
     private EffectiveProviderConfig manualConfig(ProviderKind kind, AiCommitSettings.State state) {
@@ -89,12 +103,12 @@ public final class ProviderConfigResolver {
                 trim(providerState.wireApi));
     }
 
-    private EffectiveProviderConfig localToolConfig(ProviderKind kind) {
+    private EffectiveProviderConfig localToolConfig(ProviderKind kind, ResolutionContext context) {
         if (kind == ProviderKind.CLAUDE) {
-            return claudeLocalConfig();
+            return claudeLocalConfig(context);
         }
         if (kind == ProviderKind.OPENAI) {
-            return codexLocalConfig();
+            return codexLocalConfig(context);
         }
         return null;
     }
@@ -117,14 +131,13 @@ public final class ProviderConfigResolver {
         return null;
     }
 
-    private EffectiveProviderConfig ccSwitchConfig(ProviderKind kind) {
+    private EffectiveProviderConfig ccSwitchConfig(ProviderKind kind, ResolutionContext context) {
         try {
-            Path db = Paths.get(System.getProperty("user.home"), ".cc-switch", "cc-switch.db");
+            Path db = context.ccSwitchDbPath;
             if (!Files.isRegularFile(db)) {
                 return null;
             }
-            JsonObject settings = readCcSwitchSettings();
-            String preferredId = preferredProviderId(settings, kind);
+            String preferredId = preferredProviderId(context.ccSwitchSettings, kind);
             try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + db.toAbsolutePath());
                  Statement statement = connection.createStatement()) {
                 ResultSet rows = statement.executeQuery("SELECT * FROM providers");
@@ -152,21 +165,19 @@ public final class ProviderConfigResolver {
         return null;
     }
 
-    private EffectiveProviderConfig claudeLocalConfig() {
+    private EffectiveProviderConfig claudeLocalConfig(ResolutionContext context) {
         JsonObject env = new JsonObject();
-        mergeJson(env, readJsonFile(Paths.get(System.getProperty("user.home"), ".claude", "settings.json")), "env");
-        mergeJson(env, readJsonFile(Paths.get(System.getProperty("user.home"), ".claude", "settings.local.json")), "env");
-        mergeMap(env, readTomlSection(Paths.get(System.getProperty("user.home"), ".codex", "config.toml"),
-                "shell_environment_policy.set"));
+        mergeJson(env, context.claudeSettings, "env");
+        mergeJson(env, context.claudeLocalSettings, "env");
+        mergeMap(env, context.codexConfig.sections.get("shell_environment_policy.set"));
         String apiKey = firstJson(env, new JsonObject(), "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_API_KEY");
         String baseUrl = firstJson(env, new JsonObject(), "ANTHROPIC_BASE_URL", "CLAUDE_BASE_URL");
         String model = firstJson(env, new JsonObject(), "ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL");
         return new EffectiveProviderConfig(ProviderKind.CLAUDE, apiKey, baseUrl, model, "local Claude/Codex config");
     }
 
-    private EffectiveProviderConfig codexLocalConfig() {
-        Path configPath = Paths.get(System.getProperty("user.home"), ".codex", "config.toml");
-        TomlConfig toml = readToml(configPath);
+    private EffectiveProviderConfig codexLocalConfig(ResolutionContext context) {
+        TomlConfig toml = context.codexConfig;
         String providerName = toml.root.get("model_provider");
         Map<String, String> provider = providerName == null ? null : toml.sections.get("model_providers." + providerName);
         if ((provider == null || provider.isEmpty()) && !toml.sections.isEmpty()) {
@@ -208,10 +219,9 @@ public final class ProviderConfigResolver {
                 "local Codex config", wireApi);
     }
 
-    private List<ProviderKind> preferredCcSwitchKinds() {
-        JsonObject settings = readCcSwitchSettings();
-        String claude = stringProperty(settings, "currentProviderClaude");
-        String codex = stringProperty(settings, "currentProviderCodex");
+    private List<ProviderKind> preferredCcSwitchKinds(ResolutionContext context) {
+        String claude = stringProperty(context.ccSwitchSettings, "currentProviderClaude");
+        String codex = stringProperty(context.ccSwitchSettings, "currentProviderCodex");
         if (notBlank(claude)) {
             return Arrays.asList(ProviderKind.CLAUDE, ProviderKind.OPENAI);
         }
@@ -264,19 +274,6 @@ public final class ProviderConfigResolver {
         return notBlank(currentCodex) ? currentCodex : null;
     }
 
-    private JsonObject readCcSwitchSettings() {
-        try {
-            Path path = Paths.get(System.getProperty("user.home"), ".cc-switch", "settings.json");
-            if (!Files.isRegularFile(path)) {
-                return null;
-            }
-            String json = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
-            return parseObject(json);
-        } catch (IOException e) {
-            return null;
-        }
-    }
-
     private List<ProviderKind> supportedKinds() {
         return Arrays.asList(ProviderKind.CLAUDE, ProviderKind.OPENAI);
     }
@@ -290,6 +287,9 @@ public final class ProviderConfigResolver {
             return parseObject(json);
         } catch (IOException e) {
             return null;
+        } catch (RuntimeException e) {
+            LOG.debug("Failed to parse JSON config: " + path + ", " + e.getMessage());
+            return null;
         }
     }
 
@@ -297,8 +297,13 @@ public final class ProviderConfigResolver {
         if (json == null || json.trim().isEmpty()) {
             return new JsonObject();
         }
-        JsonElement element = JsonParser.parseString(json);
-        return element != null && element.isJsonObject() ? element.getAsJsonObject() : new JsonObject();
+        try {
+            JsonElement element = JsonParser.parseString(json);
+            return element != null && element.isJsonObject() ? element.getAsJsonObject() : new JsonObject();
+        } catch (RuntimeException e) {
+            LOG.debug("Failed to parse JSON object: " + e.getMessage());
+            return new JsonObject();
+        }
     }
 
     private String firstJson(JsonObject primary, JsonObject secondary, String... keys) {
@@ -348,10 +353,6 @@ public final class ProviderConfigResolver {
                 target.addProperty(entry.getKey(), entry.getValue());
             }
         }
-    }
-
-    private Map<String, String> readTomlSection(Path path, String section) {
-        return readToml(path).sections.getOrDefault(section, new LinkedHashMap<>());
     }
 
     private TomlConfig readToml(Path path) {
@@ -505,5 +506,22 @@ public final class ProviderConfigResolver {
     private static final class TomlConfig {
         private final Map<String, String> root = new LinkedHashMap<>();
         private final Map<String, Map<String, String>> sections = new LinkedHashMap<>();
+    }
+
+    private static final class ResolutionContext {
+        private final JsonObject claudeSettings;
+        private final JsonObject claudeLocalSettings;
+        private final TomlConfig codexConfig;
+        private final JsonObject ccSwitchSettings;
+        private final Path ccSwitchDbPath;
+
+        private ResolutionContext(JsonObject claudeSettings, JsonObject claudeLocalSettings,
+                                  TomlConfig codexConfig, JsonObject ccSwitchSettings, Path ccSwitchDbPath) {
+            this.claudeSettings = claudeSettings;
+            this.claudeLocalSettings = claudeLocalSettings;
+            this.codexConfig = codexConfig;
+            this.ccSwitchSettings = ccSwitchSettings;
+            this.ccSwitchDbPath = ccSwitchDbPath;
+        }
     }
 }
