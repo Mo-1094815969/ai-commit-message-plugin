@@ -63,3 +63,7 @@ tasks.matching { it.name.startsWith('buildSearchableOptions') }.configureEach {
 tasks.named('buildSearchableOptions') {
     enabled = false
 }
+
+publishPlugin {
+    token = System.getenv('JETBRAINS_MARKETPLACE_TOKEN') ?: findProperty('jetbrains.marketplace.token') ?: ''
+}

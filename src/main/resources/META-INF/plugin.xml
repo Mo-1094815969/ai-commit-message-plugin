@@ -1,6 +1,6 @@
 <idea-plugin>
     <id>com.github.aicommit.message.generator</id>
-    <name>AI Commit Message</name>
+    <name>AI Commit Message Generator</name>
     <vendor>Mo</vendor>
 
     <resource-bundle>messages.AiCommitBundle</resource-bundle>
