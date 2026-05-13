@@ -6,8 +6,6 @@
     <resource-bundle>messages.AiCommitBundle</resource-bundle>
 
     <description><![CDATA[
-        <p><img src="https://raw.githubusercontent.com/Mo-1094815969/ai-commit-message-plugin/main/src/main/resources/META-INF/setting.png" alt="AI Commit Message settings screenshot" width="760"/></p>
-        <p><img src="https://raw.githubusercontent.com/Mo-1094815969/ai-commit-message-plugin/main/src/main/resources/META-INF/commit.png" alt="AI Commit Message commit screenshot" width="760"/></p>
         <p><b>English</b></p>
         <p>Generate polished Git commit messages from the files already selected in the JetBrains Commit tool window.</p>
         <ul>
