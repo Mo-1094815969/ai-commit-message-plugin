@@ -7,7 +7,7 @@ description: Generate exactly one commitlint-compatible Conventional Commits mes
 
 ## Goal
 
-Generate exactly one commit message from the provided diff only. Follow Conventional Commits and the common `@commitlint/config-conventional` type set. Do not infer unrelated changes. Do not run commands, edit files, commit, or push.
+Generate exactly one commit message from the provided diff only. Follow Conventional Commits and the common `@commitlint/config-conventional` type set. The body should explain why the change exists, what problem it solves, or what impact it has, not restate the diff line by line. Do not infer unrelated changes. Do not run commands, edit files, commit, or push.
 
 ## Format
 
@@ -25,18 +25,21 @@ body
 - Keep the full header within 100 characters when possible.
 - Do not end `subject` with a period.
 - Do not use emoji, signatures, Co-Authored-By lines, issue footers, or explanatory notes outside the commit message.
-- Always include a body. For single-file trivial changes, one bullet is sufficient. For multi-file diffs, write one bullet per logical change.
-- When the diff touches multiple files, multiple hunks, or multiple logical changes, prefer 1-7 bullets instead of a one-line summary.
+- Always include a body. For single-file trivial changes, one concise bullet is enough. For larger diffs, scale the body to the size of the change.
+- For medium diffs, use 3-6 grouped bullets. For large diffs (10+ files or several subsystems), use 6-8 grouped bullets. For very large diffs (20+ files), use 7-10 grouped bullets unless the diff is almost entirely the same mechanical change repeated across files.
+- Do not write one bullet per file, class, or field unless that item is the reason for the change.
+- Cover each major functional area touched by the diff, especially new services, settings, UI behavior, tests, provider changes, and migration or fallback paths. Large commits should not collapse unrelated areas into one broad bullet.
 - Separate body from header with one blank line.
-- Prefer a `- ` bullet list for body content. Each bullet should describe one concrete change, reason, or impact.
+- Prefer a `- ` bullet list for body content. Each bullet should describe one change, but the emphasis should be on why it matters.
 - Keep body bullets concise and within 100 characters when practical.
 - Do not use vague bullets such as "improve user experience" unless the exact behavior is named.
-- Use exact nouns from the diff when helpful, such as provider names, settings fields, UI controls, paths, or files.
+- Use exact nouns from the diff only when they help explain the behavior, impact, or failure mode.
 - When the diff changes numeric values (thresholds, timeouts, limits, sizes), mention both old and new values.
-- Name specific methods, classes, and fields that were added or modified.
+- Mention specific methods, classes, or fields only when they are needed to explain the reason or impact.
 - If the diff changes behavior, mention the user-visible behavior or failure mode in at least one body bullet.
+- Do not mirror the diff as a checklist; the diff already shows what changed.
 - Keep the style stable across different models.
-- Prefer one header plus 1-7 bullets for non-trivial diffs; do not add commentary outside the commit message.
+- Prefer one header plus enough grouped bullets to represent the major work; do not add commentary outside the commit message.
 
 ## Type Set
 
@@ -71,23 +74,27 @@ Avoid class names, method names, raw paths, and vague scopes like `core` unless 
 ## Body Detail
 
 When adding a body, make the bullets precise enough for a reviewer to understand the change without
-opening the diff. Prefer 1-7 bullets in this order:
+opening the diff. Prefer bullets grouped by functional area, reason, or impact, not by file or symbol.
+For large diffs, it is acceptable to name key classes, services, settings, and tests when that helps
+the reviewer see the main work, as long as each bullet still represents a meaningful area instead of
+a single-file inventory:
 
-1. What changed in the main behavior or API.
-2. How important implementation pieces changed.
-3. Why the change matters, including user-visible impact, compatibility, or failure mode.
-4. Any intentional fallback, migration, or limitation.
+1. Why the change was needed.
+2. What behavior or risk it affects.
+3. The main implementation areas involved, named concretely when useful.
+4. Any intentional fallback, migration, tests, or limitation.
 
 Good body bullets:
 
-- `- Add SSE parsing for Claude and Codex/OpenAI providers`
-- `- Throttle Commit Message input updates during generation`
-- `- Keep non-streaming generation as the provider fallback`
-- `- Read Codex relay base URL from local config before environment fallback`
-- `- Restore the toolbar icon after success, failure, and timeout paths`
+- `- Add CommitSkillResolver so Skill mode can load builtin and project git-commit rules`
+- `- Route commit generation through CommitHttpAiClient to support streaming and retry fallback`
+- `- Filter sensitive paths from collected diffs to reduce credential leakage during generation`
+- `- Persist the UI language so auto language mode follows the visible interface`
+- `- Cover commit HTTP, cleanup, settings, and language sync behavior with focused tests`
 
 Weak body bullets:
 
+- `- List added classes and fields`
 - `- Improve generation logic`
 - `- Improve user experience`
 - `- Adjust code`

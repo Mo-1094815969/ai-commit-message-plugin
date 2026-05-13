@@ -12,7 +12,6 @@ public final class CommitPromptBuilder {
 
     public String build(String diff, AiCommitSettings.State settings) {
         int fileCount = countDiffFiles(diff);
-        int minBullets = Math.max(1, Math.min(fileCount, 7));
 
         StringBuilder prompt = new StringBuilder();
         String skill = new SkillScanner().readSkillContent(settings.skillRef);
@@ -29,25 +28,36 @@ public final class CommitPromptBuilder {
         prompt.append("- Commit message language: ").append(settings.language).append("\n");
         prompt.append("- Generate exactly one commit message.\n");
         prompt.append("- Use only the diff below. Do not infer unrelated changes.\n");
-        prompt.append("- Use concrete component, file, setting, provider, and UI behavior names from the diff.\n");
-        prompt.append("- Do NOT collapse changes from different files into one bullet. Each file or logical change MUST have its own bullet.\n");
+        prompt.append("- Group related changes by intent or impact; do not write one bullet per file, class, or field.\n");
+        prompt.append("- Cover each major functional area touched by the diff so large commits are still understandable.\n");
+        prompt.append("- Explain why the change exists, what problem it solves, or what behavior it preserves.\n");
         prompt.append("- When the diff changes numeric values (thresholds, timeouts, limits, sizes), mention both old and new values.\n");
-        prompt.append("- Name specific methods, classes, and fields that were added or modified.\n");
+        prompt.append("- Mention specific methods, classes, and fields only when they help explain the reason or impact.\n");
         prompt.append("- Do NOT use generic body bullets such as \"improve logic\" or \"optimize experience\".\n");
         prompt.append("- Mention user-visible behavior, failure modes, compatibility, or settings impact when relevant.\n");
-        prompt.append("- Use precise '- ' bullets that explain what changed and why it matters.\n");
+        prompt.append("- Use precise '- ' bullets that explain why the change matters, not a line-by-line recap of the diff.\n");
         prompt.append("- Keep the tone and structure consistent across models.\n");
-        if (fileCount >= 2) {
-            prompt.append("- IMPORTANT: This diff contains ").append(fileCount).append(" files. ");
-            prompt.append("You MUST write at least ").append(minBullets).append(" body bullets. ");
-            prompt.append("Do NOT write fewer than ").append(minBullets).append(" bullets.\n");
-        }
+        appendBodyScalePreference(prompt, fileCount);
         prompt.append("- Output only the final commit message wrapped in <commit> and </commit> tags.\n\n");
         prompt.append("## Selected git diff\n\n```diff\n");
         prompt.append(diff);
         prompt.append("\n```\n\n");
         prompt.append("Return format:\n<commit>\ntype(scope): description\n\nbody\n</commit>\n");
         return prompt.toString();
+    }
+
+    private void appendBodyScalePreference(StringBuilder prompt, int fileCount) {
+        if (fileCount >= 20) {
+            prompt.append("- IMPORTANT: This diff contains ").append(fileCount).append(" files. ");
+            prompt.append("Write 7-10 grouped body bullets; do not write fewer than 7 unless the diff is almost entirely the same mechanical change repeated across files.\n");
+            prompt.append("- For large diffs, name the main services, settings, UI flows, provider paths, tests, and fallback behavior when they are meaningful, while still grouping related files together.\n");
+        } else if (fileCount >= 10) {
+            prompt.append("- IMPORTANT: This diff contains ").append(fileCount).append(" files. ");
+            prompt.append("Write 6-8 grouped body bullets covering the major functional areas.\n");
+        } else if (fileCount >= 2) {
+            prompt.append("- IMPORTANT: This diff contains ").append(fileCount).append(" files. ");
+            prompt.append("Write 3-6 grouped body bullets as needed; do not compress unrelated areas into one vague bullet.\n");
+        }
     }
 
     static int countDiffFiles(String diff) {

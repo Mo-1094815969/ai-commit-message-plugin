@@ -16,9 +16,9 @@ public class CommitPromptBuilderTest {
                         "=== NEW: B.java ===\n+ line\n",
                 state);
 
-        Assert.assertTrue(prompt.contains("MUST write at least 2 body bullets"));
-        Assert.assertTrue(prompt.contains("Do NOT collapse changes from different files into one bullet"));
-        Assert.assertTrue(prompt.contains("Use precise '- ' bullets"));
+        Assert.assertTrue(prompt.contains("Write 3-6 grouped body bullets"));
+        Assert.assertTrue(prompt.contains("do not write one bullet per file, class, or field"));
+        Assert.assertTrue(prompt.contains("why the change matters, not a line-by-line recap of the diff"));
     }
 
     @Test
@@ -34,7 +34,26 @@ public class CommitPromptBuilderTest {
         String prompt = new CommitPromptBuilder().build(diff.toString(), state);
 
         Assert.assertTrue(prompt.contains("This diff contains 10 files"));
-        Assert.assertTrue(prompt.contains("MUST write at least 7 body bullets"));
+        Assert.assertTrue(prompt.contains("Write 6-8 grouped body bullets"));
+        Assert.assertTrue(prompt.contains("covering the major functional areas"));
+    }
+
+    @Test
+    public void requiresEnoughBodyBulletsForVeryLargeDiffs() {
+        AiCommitSettings.State state = new AiCommitSettings.State();
+        state.language = "English";
+
+        StringBuilder diff = new StringBuilder();
+        for (int i = 0; i < 38; i++) {
+            diff.append("=== MODIFICATION: File").append(i).append(".java ===\n+ line\n");
+        }
+
+        String prompt = new CommitPromptBuilder().build(diff.toString(), state);
+
+        Assert.assertTrue(prompt.contains("This diff contains 38 files"));
+        Assert.assertTrue(prompt.contains("Write 7-10 grouped body bullets"));
+        Assert.assertTrue(prompt.contains("do not write fewer than 7"));
+        Assert.assertTrue(prompt.contains("name the main services, settings, UI flows"));
     }
 
     @Test

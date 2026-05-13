@@ -62,7 +62,6 @@ public final class GenerateCommitMessageAction extends AnAction implements DumbA
         }
         Collection<Change> changes = changesCollector.getSelectedChanges(event, project);
         if (changes == null || changes.isEmpty()) {
-            commitMessagePanel.setCommitMessage(AiCommitBundle.message("commit.noSelectedFiles"));
             notify(project, AiCommitBundle.message("commit.noChanges"), NotificationType.WARNING);
             return;
         }

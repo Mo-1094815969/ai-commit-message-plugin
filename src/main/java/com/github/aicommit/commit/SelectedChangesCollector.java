@@ -37,14 +37,14 @@ public final class SelectedChangesCollector {
     public Collection<Change> getSelectedChanges(@NotNull AnActionEvent event, @NotNull Project project) {
         Object workflowHandler = getWorkflowHandler(event);
         Collection<Change> included = getIncludedChangesViaReflection(workflowHandler);
-        if (included != null && !included.isEmpty()) {
+        if (included != null) {
             return included;
         }
 
         Object messageControl = event.getData(VcsDataKeys.COMMIT_MESSAGE_CONTROL);
         if (messageControl instanceof CheckinProjectPanel) {
             Collection<Change> selected = ((CheckinProjectPanel) messageControl).getSelectedChanges();
-            if (selected != null && !selected.isEmpty()) {
+            if (selected != null) {
                 return selected;
             }
         }
