@@ -2,6 +2,7 @@
     <id>com.github.aicommit.message.generator</id>
     <name>AI Commit Message Generator</name>
     <vendor>Mo</vendor>
+    <version>1.0.1</version>
 
     <resource-bundle>messages.AiCommitBundle</resource-bundle>
 
@@ -25,6 +26,24 @@
             <li>配置入口：<code>Settings / Preferences | Tools | AI Commit Message</code>。</li>
         </ul>
     ]]></description>
+
+    <change-notes><![CDATA[
+        <p><b>English</b></p>
+        <ul>
+            <li>Adjusted commit prompt body rules to group bullets by intent and impact instead of listing one bullet per file.</li>
+            <li>Scaled body bullet guidance for small, medium, and very large diffs, with extra coverage for 20+ file changes.</li>
+            <li>Clarified empty-selection messages and allowed empty included/selected change collections to keep the commit UI flow consistent.</li>
+            <li>Updated the bundled git-commit Skill and tests to match the grouped body guidance.</li>
+            <li>Removed remote screenshot references from the plugin description to avoid broken Marketplace images after repository changes.</li>
+        </ul>
+        <p><b>中文</b></p>
+        <ul>
+            <li>调整提交信息正文规则，按意图和影响分组，而不是按文件逐条罗列。</li>
+            <li>按小型、中型和超大型 diff 缩放正文 bullet 数量，并补充 20+ 文件变更的覆盖要求。</li>
+            <li>优化未选择文件时的提示文案，并允许空的 included/selected 变更集合保持提交 UI 流程一致。</li>
+            <li>同步更新内置 git-commit Skill 和测试，保持与分组正文规则一致。</li>
+        </ul>
+    ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>
 

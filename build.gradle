@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'com.github.aicommit'
-version = '1.0.0'
+version = '1.0.1'
 
 repositories {
     mavenCentral()
@@ -37,21 +37,19 @@ patchPluginXml {
     changeNotes = '''
         <p><b>English</b></p>
         <ul>
-            <li>Improved streaming generation with smoother incremental updates and a stable final commit message.</li>
-            <li>Added a clearer default commit format for fuller output.</li>
-            <li>Unified provider support around Claude, Codex, and OpenAI-compatible relays.</li>
-            <li>Polished plugin and action icons for a cleaner JetBrains UI.</li>
-            <li>Smoother streaming output by lowering render thresholds for near real-time character display.</li>
-            <li>OpenAI/Codex models now receive Skill instructions via system message for richer, more detailed commit bodies.</li>
+            <li>Adjusted commit prompt body rules to group bullets by intent and impact instead of listing one bullet per file.</li>
+            <li>Scaled body bullet guidance for small, medium, and very large diffs, with extra coverage for 20+ file changes.</li>
+            <li>Clarified empty-selection messages and allowed empty included/selected change collections to keep the commit UI flow consistent.</li>
+            <li>Updated the bundled git-commit Skill and tests to match the grouped body guidance.</li>
+            <li>Removed remote screenshot references from the plugin description to avoid broken Marketplace images after repository changes.</li>
         </ul>
         <p><b>中文</b></p>
         <ul>
-            <li>优化了流式生成体验，减少碎片化刷新，并保证最终提交信息稳定完整。</li>
-            <li>补充更清晰的默认提交格式，让输出内容更完整。</li>
-            <li>统一支持 Claude、Codex 以及 OpenAI 兼容中转站。</li>
-            <li>优化了插件与动作图标，提升 JetBrains 界面一致性。</li>
-            <li>大幅降低流式渲染阈值，输出接近逐字显示，消除卡顿感。</li>
-            <li>OpenAI/Codex 模型现通过 system message 接收 Skill 指令，生成的提交正文更详细精准。</li>
+            <li>调整提交信息正文规则，按意图和影响分组，而不是按文件逐条罗列。</li>
+            <li>按小型、中型和超大型 diff 缩放正文 bullet 数量，并补充 20+ 文件变更的覆盖要求。</li>
+            <li>优化未选择文件时的提示文案，并允许空的 included/selected 变更集合保持提交 UI 流程一致。</li>
+            <li>同步更新内置 git-commit Skill 和测试，保持与分组正文规则一致。</li>
+            <li>移除插件描述中的远程截图引用，避免仓库地址变更后 Marketplace 图片失效。</li>
         </ul>
     '''
 }
