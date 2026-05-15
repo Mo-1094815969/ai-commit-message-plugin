@@ -1,5 +1,6 @@
 package com.github.aicommit.provider;
 
+import com.github.aicommit.settings.AiCommitSettings;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -23,7 +24,7 @@ public final class ClaudeProvider implements AiProvider {
     public String generate(String prompt, EffectiveProviderConfig config, int timeoutSeconds)
             throws IOException, InterruptedException {
         JsonObject body = new JsonObject();
-        body.addProperty("model", valueOr(config.getModel(), "claude-sonnet-4-5"));
+        body.addProperty("model", valueOr(config.getModel(), AiCommitSettings.DEFAULT_CLAUDE_MODEL));
         body.addProperty("max_tokens", DEFAULT_MAX_TOKENS);
         body.addProperty("temperature", 0.0);
 
@@ -59,7 +60,7 @@ public final class ClaudeProvider implements AiProvider {
                                     Consumer<String> chunkConsumer)
             throws IOException, InterruptedException {
         JsonObject body = new JsonObject();
-        body.addProperty("model", valueOr(config.getModel(), "claude-sonnet-4-5"));
+        body.addProperty("model", valueOr(config.getModel(), AiCommitSettings.DEFAULT_CLAUDE_MODEL));
         body.addProperty("max_tokens", DEFAULT_MAX_TOKENS);
         body.addProperty("temperature", 0.0);
         body.addProperty("stream", true);

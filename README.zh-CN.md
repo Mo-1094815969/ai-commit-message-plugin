@@ -10,15 +10,14 @@
 - 只使用当前选中准备提交的文件。
 - 生成后直接写入 Commit Message 输入框。
 - 生成过程中显示加载图标。
-- 默认 60 秒超时。
-- 生成失败时，将错误提示写入 Commit Message 输入框。
+- 默认 75 秒超时。
+- 生成失败时清空 Commit Message 输入框，并显示对应语言的通知。
 - 支持 Claude 和 Codex/OpenAI 兼容中转站。
 - 设置界面支持中文/英文切换。
 - 支持通过手动 Base URL 配置 OpenAI 兼容或 Claude 兼容的第三方中转站。
 - 凭证解析优先级：
   - 手动设置
   - 本地 Claude/Codex 配置
-  - 只读 cc-switch 配置
   - 环境变量
 - 内置 `git-commit` Skill 作为默认 commit message 风格规范。
 - 按当前提供方扫描本地 Skills，并允许用户覆盖内置默认规范。
@@ -26,9 +25,11 @@
 
 ## 设置
 
-打开 `Settings | Tools | AI Commit Message`。
+打开 `Settings | Other Settings | AI Commit Message`。
 
 手动填写的 API Key 会存储在 JetBrains PasswordSafe 中。Base URL、模型、语言、超时时间、Skill 和排除规则会存储在插件设置文件中。
+
+新用户首次进入时可自动使用本地 Claude/Codex 配置。首次保存后，再次进入设置页会优先展示插件保存的配置。点击“恢复默认（读取本地配置）”会把本地提供方配置重新回显到设置页，但不会修改本地工具配置文件。
 
 未选择本地 Skill 时，插件会使用内置的 `git-commit` Skill。该规范专门适配插件场景：只根据选中 diff 生成一条 Conventional Commits 信息，遵守配置的输出语言，并明确禁止 AI 执行命令、提交或推送。
 
@@ -37,7 +38,7 @@ Codex/OpenAI 兼容中转站的 Base URL 支持填写根地址、`/v1`、`/v1/ch
 手动配置留空时，插件会尝试读取本地工具配置：
 
 - Claude：`~/.claude/settings.json`、`~/.claude/settings.local.json`
-- Codex：`~/.codex/config.toml`，包括 `model_provider`、`model`、`base_url` 和 `wire_api`
+- Codex：`~/.codex/config.toml`，包括 `model_provider`、`model`、`base_url` 和 `wire_api`；`~/.codex/auth.json` 用于读取 API Key
 
 ## 环境变量
 

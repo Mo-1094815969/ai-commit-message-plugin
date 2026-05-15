@@ -17,6 +17,8 @@ public final class AiCommitSettings implements PersistentStateComponent<AiCommit
     public static final String PROVIDER_OPENAI = "openai";
     public static final String UI_LANGUAGE_EN = "English";
     public static final String UI_LANGUAGE_ZH = "中文";
+    public static final String DEFAULT_CLAUDE_MODEL = "claude-opus-4-7";
+    public static final String DEFAULT_OPENAI_MODEL = "gpt-5.5";
 
     private State state = new State();
 
@@ -44,6 +46,7 @@ public final class AiCommitSettings implements PersistentStateComponent<AiCommit
         copy.timeoutSeconds = state.timeoutSeconds;
         copy.enableSensitiveFilter = state.enableSensitiveFilter;
         copy.excludePatterns = state.excludePatterns;
+        copy.providerConfigSaved = state.providerConfigSaved;
         copy.claude.copyFrom(state.claude);
         copy.openai.copyFrom(state.openai);
         copy.claude.apiKey = SecretStore.getApiKey(PROVIDER_CLAUDE);
@@ -54,6 +57,7 @@ public final class AiCommitSettings implements PersistentStateComponent<AiCommit
 
     public void update(State newState) {
         newState.normalize();
+        newState.providerConfigSaved = true;
         SecretStore.setApiKey(PROVIDER_CLAUDE, newState.claude.apiKey);
         SecretStore.setApiKey(PROVIDER_OPENAI, newState.openai.apiKey);
         newState.claude.apiKey = "";
@@ -66,8 +70,9 @@ public final class AiCommitSettings implements PersistentStateComponent<AiCommit
         public String provider = PROVIDER_AUTO;
         public String language = "English";
         public String skillRef = "";
-        public int timeoutSeconds = 60;
+        public int timeoutSeconds = 75;
         public boolean enableSensitiveFilter = true;
+        public boolean providerConfigSaved = false;
         public String excludePatterns = String.join("\n",
                 ".env*",
                 "*.pem",
@@ -81,8 +86,8 @@ public final class AiCommitSettings implements PersistentStateComponent<AiCommit
                 "package-lock.json",
                 "pnpm-lock.yaml",
                 "yarn.lock");
-        public ProviderState claude = new ProviderState("claude-sonnet-4-5");
-        public ProviderState openai = new ProviderState("gpt-4.1-mini");
+        public ProviderState claude = new ProviderState(DEFAULT_CLAUDE_MODEL);
+        public ProviderState openai = new ProviderState(DEFAULT_OPENAI_MODEL);
 
         public void normalize() {
             if (!UI_LANGUAGE_ZH.equals(uiLanguage)) {
@@ -96,24 +101,22 @@ public final class AiCommitSettings implements PersistentStateComponent<AiCommit
                     && !PROVIDER_OPENAI.equals(provider)) {
                 provider = PROVIDER_AUTO;
             }
-            if (language == null || language.trim().isEmpty()) {
-                language = "English";
-            }
+            language = CommitLanguage.normalize(language);
             if (skillRef == null) {
                 skillRef = "";
             }
             if (timeoutSeconds <= 0) {
-                timeoutSeconds = 60;
+                timeoutSeconds = 75;
             }
             timeoutSeconds = Math.min(Math.max(timeoutSeconds, 10), 120);
             if (excludePatterns == null || excludePatterns.trim().isEmpty()) {
                 excludePatterns = ".env*\n*.pem\n*.key\n*.crt\n*.p12\n*.jks\nid_rsa*\nsecrets.*";
             }
             if (claude == null) {
-                claude = new ProviderState("claude-sonnet-4-5");
+                claude = new ProviderState(DEFAULT_CLAUDE_MODEL);
             }
             if (openai == null) {
-                openai = new ProviderState("gpt-4.1-mini");
+                openai = new ProviderState(DEFAULT_OPENAI_MODEL);
             }
             claude.normalize();
             openai.normalize();

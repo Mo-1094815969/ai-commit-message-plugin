@@ -10,15 +10,14 @@ Standalone JetBrains IDE plugin MVP for generating Git commit messages from the 
 - Uses only the files selected for commit.
 - Writes the generated message directly into the Commit Message input.
 - Shows a loading icon while generation is running.
-- Times out after 60 seconds by default.
-- Writes an error message into the Commit Message input when generation fails.
+- Times out after 75 seconds by default.
+- Clears the Commit Message input and shows a localized notification when generation fails.
 - Supports Claude and Codex/OpenAI-compatible relays.
 - Provides an English/Chinese settings UI switch.
 - Supports OpenAI-compatible and Claude-compatible relay services through manual Base URL settings.
 - Resolves credentials with this priority:
   - manual settings
   - local Claude/Codex config
-  - read-only cc-switch config
   - environment variables
 - Uses a built-in `git-commit` Skill as the default commit-message style guide.
 - Scans provider-specific local Skills and lets the user override the built-in default.
@@ -26,9 +25,11 @@ Standalone JetBrains IDE plugin MVP for generating Git commit messages from the 
 
 ## Settings
 
-Open `Settings | Tools | AI Commit Message`.
+Open `Settings | Other Settings | AI Commit Message`.
 
 Manual API keys are stored in JetBrains PasswordSafe. Base URL, model, language, timeout, Skill, and exclude patterns are stored in the plugin settings file.
+
+New users can start from local Claude/Codex settings automatically. After the first save, the plugin shows the saved plugin settings on the next entry. Use `Restore defaults from local config` to re-read local provider config into the settings UI without modifying local tool files.
 
 When no local Skill is selected, the plugin uses the bundled `git-commit` Skill. It is tailored for this plugin: it generates one Conventional Commits message from the selected diff only, respects the configured output language, and never asks the AI to run commands, commit, or push.
 
@@ -37,7 +38,7 @@ For Codex/OpenAI-compatible relays, Base URL accepts the relay root URL, `/v1`, 
 When manual fields are empty, the plugin can read local tool configs:
 
 - Claude: `~/.claude/settings.json`, `~/.claude/settings.local.json`
-- Codex: `~/.codex/config.toml`, including `model_provider`, `model`, `base_url`, and `wire_api`
+- Codex: `~/.codex/config.toml`, including `model_provider`, `model`, `base_url`, and `wire_api`; `~/.codex/auth.json` for API key
 
 ## Environment Variables
 

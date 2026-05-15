@@ -12,6 +12,7 @@ public final class CommitPromptBuilder {
 
     public String build(String diff, AiCommitSettings.State settings) {
         int fileCount = countDiffFiles(diff);
+        int changedLineCount = countChangedLines(diff);
 
         StringBuilder prompt = new StringBuilder();
         String skill = new SkillScanner().readSkillContent(settings.skillRef);
@@ -37,7 +38,7 @@ public final class CommitPromptBuilder {
         prompt.append("- Mention user-visible behavior, failure modes, compatibility, or settings impact when relevant.\n");
         prompt.append("- Use precise '- ' bullets that explain why the change matters, not a line-by-line recap of the diff.\n");
         prompt.append("- Keep the tone and structure consistent across models.\n");
-        appendBodyScalePreference(prompt, fileCount);
+        appendBodyScalePreference(prompt, fileCount, changedLineCount);
         prompt.append("- Output only the final commit message wrapped in <commit> and </commit> tags.\n\n");
         prompt.append("## Selected git diff\n\n```diff\n");
         prompt.append(diff);
@@ -46,7 +47,7 @@ public final class CommitPromptBuilder {
         return prompt.toString();
     }
 
-    private void appendBodyScalePreference(StringBuilder prompt, int fileCount) {
+    private void appendBodyScalePreference(StringBuilder prompt, int fileCount, int changedLineCount) {
         if (fileCount >= 20) {
             prompt.append("- IMPORTANT: This diff contains ").append(fileCount).append(" files. ");
             prompt.append("Write 7-10 grouped body bullets; do not write fewer than 7 unless the diff is almost entirely the same mechanical change repeated across files.\n");
@@ -57,6 +58,14 @@ public final class CommitPromptBuilder {
         } else if (fileCount >= 2) {
             prompt.append("- IMPORTANT: This diff contains ").append(fileCount).append(" files. ");
             prompt.append("Write 3-6 grouped body bullets as needed; do not compress unrelated areas into one vague bullet.\n");
+        } else if (fileCount == 1 && changedLineCount >= 30) {
+            prompt.append("- IMPORTANT: This diff changes one file but is non-trivial (")
+                    .append(changedLineCount).append(" changed lines). ");
+            prompt.append("Write 3-5 concrete body bullets covering the distinct behaviors in that file.\n");
+            prompt.append("- Do not collapse a complex single-file diff into one generic bullet; name the specific UI, settings, provider, or fallback behavior shown in the diff.\n");
+        } else if (fileCount == 1) {
+            prompt.append("- IMPORTANT: This diff changes one file. ");
+            prompt.append("Use a short body only when it adds concrete information beyond the subject; avoid generic filler bullets.\n");
         }
     }
 
@@ -77,6 +86,21 @@ public final class CommitPromptBuilder {
         while ((idx = diff.indexOf("diff --git ", idx)) >= 0) {
             count++;
             idx += 11;
+        }
+        return count;
+    }
+
+    static int countChangedLines(String diff) {
+        if (diff == null || diff.isEmpty()) return 0;
+        int count = 0;
+        String[] lines = diff.split("\\R");
+        for (String line : lines) {
+            if (line.startsWith("+++") || line.startsWith("---")) {
+                continue;
+            }
+            if (line.startsWith("+") || line.startsWith("-")) {
+                count++;
+            }
         }
         return count;
     }

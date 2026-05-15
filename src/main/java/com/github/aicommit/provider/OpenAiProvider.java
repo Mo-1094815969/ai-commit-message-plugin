@@ -1,5 +1,6 @@
 package com.github.aicommit.provider;
 
+import com.github.aicommit.settings.AiCommitSettings;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -42,7 +43,7 @@ public final class OpenAiProvider implements AiProvider {
     private String generateWithChatCompletionsApi(String prompt, EffectiveProviderConfig config, int timeoutSeconds)
             throws IOException, InterruptedException {
         JsonObject body = new JsonObject();
-        body.addProperty("model", valueOr(config.getModel(), "gpt-4.1-mini"));
+        body.addProperty("model", valueOr(config.getModel(), AiCommitSettings.DEFAULT_OPENAI_MODEL));
         body.addProperty("temperature", 0.3);
         body.addProperty("max_tokens", DEFAULT_MAX_TOKENS);
 
@@ -57,7 +58,7 @@ public final class OpenAiProvider implements AiProvider {
     private String generateWithResponsesApi(String prompt, EffectiveProviderConfig config, int timeoutSeconds)
             throws IOException, InterruptedException {
         JsonObject body = new JsonObject();
-        body.addProperty("model", valueOr(config.getModel(), "gpt-4.1-mini"));
+        body.addProperty("model", valueOr(config.getModel(), AiCommitSettings.DEFAULT_OPENAI_MODEL));
         body.addProperty("max_output_tokens", DEFAULT_MAX_TOKENS);
         String[] parts = splitPrompt(prompt);
         if (!parts[0].isEmpty()) {
@@ -75,7 +76,7 @@ public final class OpenAiProvider implements AiProvider {
                                                            int timeoutSeconds, Consumer<String> chunkConsumer)
             throws IOException, InterruptedException {
         JsonObject body = new JsonObject();
-        body.addProperty("model", valueOr(config.getModel(), "gpt-4.1-mini"));
+        body.addProperty("model", valueOr(config.getModel(), AiCommitSettings.DEFAULT_OPENAI_MODEL));
         body.addProperty("temperature", 0.3);
         body.addProperty("max_tokens", DEFAULT_MAX_TOKENS);
         body.addProperty("stream", true);
@@ -99,7 +100,7 @@ public final class OpenAiProvider implements AiProvider {
                                                      Consumer<String> chunkConsumer)
             throws IOException, InterruptedException {
         JsonObject body = new JsonObject();
-        body.addProperty("model", valueOr(config.getModel(), "gpt-4.1-mini"));
+        body.addProperty("model", valueOr(config.getModel(), AiCommitSettings.DEFAULT_OPENAI_MODEL));
         body.addProperty("max_output_tokens", DEFAULT_MAX_TOKENS);
         body.addProperty("stream", true);
         String[] parts = splitPrompt(prompt);

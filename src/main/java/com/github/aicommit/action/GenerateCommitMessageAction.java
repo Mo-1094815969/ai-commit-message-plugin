@@ -11,6 +11,7 @@ import com.github.aicommit.provider.AiProviderRegistry;
 import com.github.aicommit.provider.EffectiveProviderConfig;
 import com.github.aicommit.provider.ProviderConfigResolver;
 import com.github.aicommit.settings.AiCommitSettings;
+import com.github.aicommit.settings.CommitLanguage;
 import com.intellij.notification.NotificationGroupManager;
 import com.intellij.notification.NotificationType;
 import com.intellij.openapi.actionSystem.AnAction;
@@ -28,7 +29,6 @@ import com.intellij.util.concurrency.AppExecutorUtil;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.Icon;
-import java.lang.reflect.Method;
 import java.util.Collection;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -50,32 +50,31 @@ public final class GenerateCommitMessageAction extends AnAction implements DumbA
 
     @Override
     public void actionPerformed(@NotNull AnActionEvent event) {
+        AiCommitSettings.State settings = AiCommitSettings.getInstance().copyState();
         Project project = event.getProject();
         if (project == null) {
-            notify(null, AiCommitBundle.message("commit.noProject"), NotificationType.WARNING);
+            notify(null, CommitLanguage.noProjectMessage(settings.language), NotificationType.WARNING);
             return;
         }
         CommitMessageI commitMessagePanel = changesCollector.getCommitMessagePanel(event);
         if (commitMessagePanel == null) {
-            notify(project, AiCommitBundle.message("commit.noPanel"), NotificationType.WARNING);
+            notify(project, CommitLanguage.noPanelMessage(settings.language), NotificationType.WARNING);
             return;
         }
         Collection<Change> changes = changesCollector.getSelectedChanges(event, project);
         if (changes == null || changes.isEmpty()) {
-            notify(project, AiCommitBundle.message("commit.noChanges"), NotificationType.WARNING);
+            notify(project, CommitLanguage.noChangesMessage(settings.language), NotificationType.WARNING);
             return;
         }
 
         String projectKey = project.getBasePath() != null ? project.getBasePath() : project.getName();
         if (!IN_FLIGHT_PROJECTS.add(projectKey)) {
-            notify(project, "Commit message generation is already running.", NotificationType.WARNING);
+            notify(project, CommitLanguage.alreadyRunningMessage(settings.language), NotificationType.WARNING);
             return;
         }
 
-        AiCommitSettings.State settings = AiCommitSettings.getInstance().copyState();
-        String originalMessage = readCommitMessage(commitMessagePanel);
         Presentation presentation = event.getPresentation();
-        commitMessagePanel.setCommitMessage(AiCommitBundle.message("commit.generating"));
+        commitMessagePanel.setCommitMessage(CommitLanguage.generatingMessage(settings.language));
         presentation.setIcon(AnimatedIcon.Default.INSTANCE);
 
         CommitMessageCleaner cleaner = new CommitMessageCleaner();
@@ -120,8 +119,10 @@ public final class GenerateCommitMessageAction extends AnAction implements DumbA
                 streamTicker.cancel(false);
                 IN_FLIGHT_PROJECTS.remove(projectKey);
                 ApplicationManager.getApplication().invokeLater(() -> {
-                    writeFailure(commitMessagePanel, AiCommitBundle.message("commit.timeout", settings.timeoutSeconds));
+                    commitMessagePanel.setCommitMessage("");
                     restoreIcon(presentation);
+                    notify(project, CommitLanguage.timeoutMessage(settings.language, settings.timeoutSeconds),
+                            NotificationType.ERROR);
                 });
             }
         }, settings.timeoutSeconds, TimeUnit.SECONDS);
@@ -130,7 +131,7 @@ public final class GenerateCommitMessageAction extends AnAction implements DumbA
             try {
                 String diff = new GitDiffCollector().collect(changes, new SensitiveDiffFilter(settings));
                 if (diff.trim().isEmpty()) {
-                    throw new IllegalStateException(AiCommitBundle.message("commit.noDiff"));
+                    throw new IllegalStateException(CommitLanguage.noDiffMessage(settings.language));
                 }
                 String prompt = new CommitPromptBuilder().build(diff, settings);
                 EffectiveProviderConfig config = new ProviderConfigResolver().resolve(settings);
@@ -169,12 +170,10 @@ public final class GenerateCommitMessageAction extends AnAction implements DumbA
                     IN_FLIGHT_PROJECTS.remove(projectKey);
                     ApplicationManager.getApplication().invokeLater(() -> {
                         String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
-                        writeFailure(commitMessagePanel, message);
-                        if (originalMessage != null && !originalMessage.trim().isEmpty()) {
-                            LOG.info("Original commit message was replaced by failure text as requested.");
-                        }
+                        commitMessagePanel.setCommitMessage("");
                         restoreIcon(presentation);
-                        notify(project, AiCommitBundle.message("commit.failedWithReason", message), NotificationType.ERROR);
+                        notify(project, CommitLanguage.failureMessage(settings.language, message),
+                                NotificationType.ERROR);
                     });
                 }
             }
@@ -204,30 +203,11 @@ public final class GenerateCommitMessageAction extends AnAction implements DumbA
         presentation.setIcon(ACTION_ICON);
     }
 
-    private void writeFailure(CommitMessageI panel, String message) {
-        panel.setCommitMessage(AiCommitBundle.message("commit.failedWithReason", message));
-    }
-
     private void notify(Project project, String content, NotificationType type) {
         NotificationGroupManager.getInstance()
                 .getNotificationGroup(NOTIFICATION_GROUP)
                 .createNotification(content, type)
                 .notify(project);
-    }
-
-    private String readCommitMessage(CommitMessageI panel) {
-        for (String methodName : new String[]{"getCommitMessage", "getComment"}) {
-            try {
-                Method method = panel.getClass().getMethod(methodName);
-                Object result = method.invoke(panel);
-                if (result instanceof String) {
-                    return (String) result;
-                }
-            } catch (Exception ignored) {
-                // Keep trying older/newer API shapes.
-            }
-        }
-        return "";
     }
 
     private String safeModel(String model) {

@@ -15,6 +15,7 @@ public final class GitDiffCollector {
     private static final int MAX_TOTAL_DIFF_LENGTH = 12000;
     private static final int MAX_NEW_FILE_CHARS = 1200;
     private static final int MAX_CHANGED_LINES = 80;
+    private static final int MAX_DIFF_LINE_CHARS = 600;
     private static final int MAX_LCS_CELLS = 250000;
 
     public String collect(@NotNull Collection<Change> changes, @NotNull SensitiveDiffFilter filter) {
@@ -78,10 +79,6 @@ public final class GitDiffCollector {
         String after = afterRevision.getContent();
         if (before == null || after == null) {
             diff.append("[binary or unavailable content]\n");
-            return;
-        }
-        if (filter.isTooLarge(before) || filter.isTooLarge(after)) {
-            diff.append("[large file content omitted]\n");
             return;
         }
         diff.append(lineDiff(before, after));
@@ -151,7 +148,14 @@ public final class GitDiffCollector {
         if (shown >= MAX_CHANGED_LINES || line == null || line.isEmpty()) {
             return shown;
         }
-        out.append(prefix).append(line).append("\n");
+        out.append(prefix).append(truncateLine(line)).append("\n");
         return shown + 1;
+    }
+
+    private static String truncateLine(String line) {
+        if (line.length() <= MAX_DIFF_LINE_CHARS) {
+            return line;
+        }
+        return line.substring(0, MAX_DIFF_LINE_CHARS) + " ... [line truncated]";
     }
 }

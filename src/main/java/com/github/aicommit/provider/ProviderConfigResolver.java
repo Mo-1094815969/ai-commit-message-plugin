@@ -11,10 +11,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.Statement;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,6 +18,13 @@ import java.util.Map;
 
 public final class ProviderConfigResolver {
     private static final Logger LOG = Logger.getInstance(ProviderConfigResolver.class);
+
+    public EffectiveProviderConfig resolveLocalToolConfig(ProviderKind kind) {
+        if (kind == null) {
+            return null;
+        }
+        return localToolConfig(kind, loadContext());
+    }
 
     public EffectiveProviderConfig resolve(AiCommitSettings.State state) {
         ResolutionContext context = loadContext();
@@ -46,19 +49,13 @@ public final class ProviderConfigResolver {
                 return local;
             }
         }
-        for (ProviderKind kind : preferredCcSwitchKinds(context)) {
-            EffectiveProviderConfig ccSwitch = ccSwitchConfig(kind, context);
-            if (hasApiKey(ccSwitch)) {
-                return ccSwitch;
-            }
-        }
         for (ProviderKind kind : supportedKinds()) {
             EffectiveProviderConfig env = envConfig(kind);
             if (hasApiKey(env)) {
                 return env;
             }
         }
-        throw new IllegalStateException("No AI provider is configured. Add a manual API key, cc-switch provider, or environment variable.");
+        throw new IllegalStateException("No AI provider is configured. Add a manual API key, local Claude/Codex config, or environment variable.");
     }
 
     private EffectiveProviderConfig resolveKind(ProviderKind kind, AiCommitSettings.State state,
@@ -66,7 +63,6 @@ public final class ProviderConfigResolver {
         for (EffectiveProviderConfig config : Arrays.asList(
                 manualConfig(kind, state),
                 localToolConfig(kind, context),
-                ccSwitchConfig(kind, context),
                 envConfig(kind))) {
             if (hasApiKey(config)) {
                 return config;
@@ -82,8 +78,7 @@ public final class ProviderConfigResolver {
                 readJsonFile(home.resolve(".claude").resolve("settings.json")),
                 readJsonFile(home.resolve(".claude").resolve("settings.local.json")),
                 readToml(codexConfigPath),
-                readJsonFile(home.resolve(".cc-switch").resolve("settings.json")),
-                home.resolve(".cc-switch").resolve("cc-switch.db"));
+                readJsonFile(home.resolve(".codex").resolve("auth.json")));
     }
 
     private EffectiveProviderConfig manualConfig(ProviderKind kind, AiCommitSettings.State state) {
@@ -118,49 +113,16 @@ public final class ProviderConfigResolver {
             return new EffectiveProviderConfig(kind,
                     firstEnv("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_API_KEY"),
                     firstEnv("ANTHROPIC_BASE_URL", "CLAUDE_BASE_URL"),
-                    firstEnv("ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL"),
+                    firstEnv("ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL",
+                            "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL"),
                     "environment");
         }
         if (kind == ProviderKind.OPENAI) {
             return new EffectiveProviderConfig(kind,
-                    firstEnv("OPENAI_API_KEY"),
+                    firstEnv("OPENAI_API_KEY", "OPENAI_AUTH_TOKEN", "CODEX_API_KEY", "CODEX_AUTH_TOKEN"),
                     firstEnv("OPENAI_BASE_URL", "OPENAI_API_BASE"),
                     firstEnv("OPENAI_MODEL"),
                     "environment");
-        }
-        return null;
-    }
-
-    private EffectiveProviderConfig ccSwitchConfig(ProviderKind kind, ResolutionContext context) {
-        try {
-            Path db = context.ccSwitchDbPath;
-            if (!Files.isRegularFile(db)) {
-                return null;
-            }
-            String preferredId = preferredProviderId(context.ccSwitchSettings, kind);
-            try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + db.toAbsolutePath());
-                 Statement statement = connection.createStatement()) {
-                ResultSet rows = statement.executeQuery("SELECT * FROM providers");
-                while (rows.next()) {
-                    String id = safeGet(rows, "id");
-                    String appType = safeGet(rows, "app_type");
-                    String configJson = safeGet(rows, "settings_config");
-                    JsonObject config = parseObject(configJson);
-                    ProviderKind rowKind = inferKind(id, appType, config);
-                    if (rowKind != kind) {
-                        continue;
-                    }
-                    if (preferredId != null && !preferredId.equals(id)) {
-                        continue;
-                    }
-                    EffectiveProviderConfig resolved = fromCcSwitchRow(kind, config);
-                    if (hasApiKey(resolved)) {
-                        return resolved;
-                    }
-                }
-            }
-        } catch (Exception e) {
-            LOG.debug("Failed to resolve cc-switch config: " + e.getMessage());
         }
         return null;
     }
@@ -172,7 +134,8 @@ public final class ProviderConfigResolver {
         mergeMap(env, context.codexConfig.sections.get("shell_environment_policy.set"));
         String apiKey = firstJson(env, new JsonObject(), "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_API_KEY");
         String baseUrl = firstJson(env, new JsonObject(), "ANTHROPIC_BASE_URL", "CLAUDE_BASE_URL");
-        String model = firstJson(env, new JsonObject(), "ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL");
+        String model = firstJson(env, new JsonObject(), "ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL",
+                "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL");
         return new EffectiveProviderConfig(ProviderKind.CLAUDE, apiKey, baseUrl, model, "local Claude/Codex config");
     }
 
@@ -191,9 +154,11 @@ public final class ProviderConfigResolver {
         if (provider == null || provider.isEmpty()) {
             return null;
         }
+        Map<String, String> profile = selectedCodexProfile(toml);
         Map<String, String> env = toml.sections.getOrDefault("shell_environment_policy.set", new LinkedHashMap<>());
         String envKey = firstValue(provider, "env_key", "api_key_env", "apiKeyEnv");
-        String apiKey = firstValue(provider, "api_key", "apiKey", "OPENAI_API_KEY");
+        String apiKey = firstValue(provider, "api_key", "apiKey", "OPENAI_API_KEY",
+                "OPENAI_AUTH_TOKEN", "CODEX_API_KEY", "CODEX_AUTH_TOKEN");
         if (!notBlank(apiKey) && notBlank(envKey)) {
             apiKey = firstValue(env, envKey);
             if (!notBlank(apiKey)) {
@@ -201,13 +166,20 @@ public final class ProviderConfigResolver {
             }
         }
         if (!notBlank(apiKey)) {
-            apiKey = firstValue(env, "OPENAI_API_KEY");
+            apiKey = firstValue(env, "OPENAI_API_KEY", "OPENAI_AUTH_TOKEN", "CODEX_API_KEY", "CODEX_AUTH_TOKEN");
         }
         if (!notBlank(apiKey)) {
-            apiKey = firstEnv("OPENAI_API_KEY");
+            apiKey = firstJson(context.codexAuth, new JsonObject(), "OPENAI_API_KEY", "OPENAI_AUTH_TOKEN",
+                    "CODEX_API_KEY", "CODEX_AUTH_TOKEN", "api_key", "auth_token");
+        }
+        if (!notBlank(apiKey)) {
+            apiKey = firstEnv("OPENAI_API_KEY", "OPENAI_AUTH_TOKEN", "CODEX_API_KEY", "CODEX_AUTH_TOKEN");
         }
         String baseUrl = firstValue(provider, "base_url", "baseURL", "openai_base_url");
-        String model = firstValue(toml.root, "model");
+        String model = firstValue(toml.root, "model", "OPENAI_MODEL");
+        if (!notBlank(model)) {
+            model = firstValue(profile, "model", "OPENAI_MODEL");
+        }
         if (!notBlank(model)) {
             model = firstValue(provider, "model");
         }
@@ -219,59 +191,16 @@ public final class ProviderConfigResolver {
                 "local Codex config", wireApi);
     }
 
-    private List<ProviderKind> preferredCcSwitchKinds(ResolutionContext context) {
-        String claude = stringProperty(context.ccSwitchSettings, "currentProviderClaude");
-        String codex = stringProperty(context.ccSwitchSettings, "currentProviderCodex");
-        if (notBlank(claude)) {
-            return Arrays.asList(ProviderKind.CLAUDE, ProviderKind.OPENAI);
+    private Map<String, String> selectedCodexProfile(TomlConfig toml) {
+        String profileName = firstValue(toml.root, "profile");
+        if (notBlank(profileName)) {
+            Map<String, String> selected = toml.sections.get("profiles." + profileName);
+            if (selected != null) {
+                return selected;
+            }
         }
-        if (notBlank(codex)) {
-            return Arrays.asList(ProviderKind.OPENAI, ProviderKind.CLAUDE);
-        }
-        return supportedKinds();
-    }
-
-    private EffectiveProviderConfig fromCcSwitchRow(ProviderKind kind, JsonObject config) {
-        JsonObject env = config.has("env") && config.get("env").isJsonObject()
-                ? config.getAsJsonObject("env")
-                : new JsonObject();
-        String apiKey;
-        String baseUrl;
-        String model;
-        if (kind == ProviderKind.CLAUDE) {
-            apiKey = firstJson(config, env, "api_key", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_API_KEY");
-            baseUrl = firstJson(config, env, "base_url", "ANTHROPIC_BASE_URL", "CLAUDE_BASE_URL");
-            model = firstJson(config, env, "model", "ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL");
-        } else if (kind == ProviderKind.OPENAI) {
-            apiKey = firstJson(config, env, "api_key", "OPENAI_API_KEY");
-            baseUrl = firstJson(config, env, "base_url", "OPENAI_BASE_URL", "OPENAI_API_BASE");
-            model = firstJson(config, env, "model", "OPENAI_MODEL");
-        } else {
-            return null;
-        }
-        return new EffectiveProviderConfig(kind, apiKey, baseUrl, model, "cc-switch");
-    }
-
-    private ProviderKind inferKind(String id, String appType, JsonObject config) {
-        String haystack = (safe(id) + " " + safe(appType) + " " + config.toString()).toLowerCase();
-        if (haystack.contains("openai") || haystack.contains("gpt")) {
-            return ProviderKind.OPENAI;
-        }
-        if (haystack.contains("claude") || haystack.contains("anthropic")) {
-            return ProviderKind.CLAUDE;
-        }
-        return ProviderKind.fromId(appType);
-    }
-
-    private String preferredProviderId(JsonObject settings, ProviderKind kind) {
-        if (settings == null) {
-            return null;
-        }
-        if (kind == ProviderKind.CLAUDE) {
-            return stringProperty(settings, "currentProviderClaude");
-        }
-        String currentCodex = stringProperty(settings, "currentProviderCodex");
-        return notBlank(currentCodex) ? currentCodex : null;
+        Map<String, String> defaultProfile = toml.sections.get("profiles.default");
+        return defaultProfile == null ? new LinkedHashMap<>() : defaultProfile;
     }
 
     private List<ProviderKind> supportedKinds() {
@@ -325,10 +254,6 @@ public final class ProviderConfigResolver {
             return "";
         }
         return object.get(key).getAsString();
-    }
-
-    private String stringProperty(JsonObject object, String key) {
-        return jsonString(object, key);
     }
 
     private void mergeJson(JsonObject target, JsonObject source, String childObjectName) {
@@ -484,18 +409,6 @@ public final class ProviderConfigResolver {
         return value == null ? "" : value.trim();
     }
 
-    private String safe(String value) {
-        return value == null ? "" : value;
-    }
-
-    private String safeGet(ResultSet rows, String column) {
-        try {
-            return rows.getString(column);
-        } catch (Exception e) {
-            return "";
-        }
-    }
-
     private boolean isLocalUrl(String value) {
         String normalized = value == null ? "" : value.trim().toLowerCase();
         return normalized.startsWith("http://127.0.0.1")
@@ -512,16 +425,14 @@ public final class ProviderConfigResolver {
         private final JsonObject claudeSettings;
         private final JsonObject claudeLocalSettings;
         private final TomlConfig codexConfig;
-        private final JsonObject ccSwitchSettings;
-        private final Path ccSwitchDbPath;
+        private final JsonObject codexAuth;
 
         private ResolutionContext(JsonObject claudeSettings, JsonObject claudeLocalSettings,
-                                  TomlConfig codexConfig, JsonObject ccSwitchSettings, Path ccSwitchDbPath) {
+                                  TomlConfig codexConfig, JsonObject codexAuth) {
             this.claudeSettings = claudeSettings;
             this.claudeLocalSettings = claudeLocalSettings;
             this.codexConfig = codexConfig;
-            this.ccSwitchSettings = ccSwitchSettings;
-            this.ccSwitchDbPath = ccSwitchDbPath;
+            this.codexAuth = codexAuth;
         }
     }
 }

@@ -66,6 +66,26 @@ public class CommitPromptBuilderTest {
                 state);
 
         Assert.assertFalse(prompt.contains("MUST write at least"));
+        Assert.assertTrue(prompt.contains("This diff changes one file"));
+        Assert.assertTrue(prompt.contains("avoid generic filler bullets"));
+    }
+
+    @Test
+    public void complexSingleFileRequiresConcreteBodyBullets() {
+        AiCommitSettings.State state = new AiCommitSettings.State();
+        state.language = "English";
+
+        StringBuilder diff = new StringBuilder("=== MODIFICATION: AiCommitConfigurable.java ===\n");
+        for (int i = 0; i < 18; i++) {
+            diff.append("- old line ").append(i).append("\n");
+            diff.append("+ new line ").append(i).append("\n");
+        }
+
+        String prompt = new CommitPromptBuilder().build(diff.toString(), state);
+
+        Assert.assertTrue(prompt.contains("one file but is non-trivial (36 changed lines)"));
+        Assert.assertTrue(prompt.contains("Write 3-5 concrete body bullets"));
+        Assert.assertTrue(prompt.contains("Do not collapse a complex single-file diff into one generic bullet"));
     }
 
     @Test
@@ -79,6 +99,13 @@ public class CommitPromptBuilderTest {
         // fallback: standard git diff format
         Assert.assertEquals(2, CommitPromptBuilder.countDiffFiles(
                 "diff --git a/A.java b/A.java\ndiff --git a/B.java b/B.java\n"));
+    }
+
+    @Test
+    public void countChangedLinesIgnoresDiffHeaders() {
+        Assert.assertEquals(0, CommitPromptBuilder.countChangedLines(null));
+        Assert.assertEquals(2, CommitPromptBuilder.countChangedLines(
+                "+++ b/A.java\n--- a/A.java\n+ new\n- old\n context\n"));
     }
 
     @Test

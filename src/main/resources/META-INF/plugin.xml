@@ -10,38 +10,47 @@
         <p><b>English</b></p>
         <p>Generate polished Git commit messages from the files already selected in the JetBrains Commit tool window.</p>
         <ul>
-            <li>Configuration path: <code>Settings / Preferences | Tools | AI Commit Message</code>.</li>
+            <li>Configuration path: <code>Settings / Preferences | Other Settings | AI Commit Message</code>.</li>
             <li>Writes the result directly into the Commit Message field.</li>
-            <li>Supports Claude and Codex/OpenAI-compatible relays, including local config discovery and cc-switch.</li>
-            <li>Includes a built-in commitlint-style <code>git-commit</code> Skill plus provider-specific local Skills.</li>
-            <li>Offers a Chinese/English settings UI, streaming updates, and sensitive-path filtering.</li>
+            <li>Supports Claude and Codex/OpenAI-compatible relays with provider model presets and an on-demand custom model field.</li>
+            <li>Reflects local <code>~/.claude</code> and <code>~/.codex</code> config for model, Base URL, API key, and Wire API, while preserving user-saved plugin settings after save.</li>
+            <li>Includes a restore-defaults action that re-reads local provider config without modifying local tool files.</li>
+            <li>Includes a built-in commitlint-style <code>git-commit</code> Skill plus compact provider-specific local Skill selection.</li>
+            <li>Offers localized status, validation, failure notifications, streaming updates, and sensitive-path filtering.</li>
         </ul>
         <p><b>中文</b></p>
         <p>根据 JetBrains Commit 工具窗口中已选择的文件，生成更完整、更规范的 Git commit message。</p>
         <ul>
             <li>将结果直接写入 Commit Message 输入框。</li>
-            <li>支持 Claude 和 Codex/OpenAI 兼容中转站，并支持读取本地配置与 cc-switch。</li>
-            <li>内置 commitlint 风格的 <code>git-commit</code> Skill，同时支持按提供方扫描本地 Skills。</li>
-            <li>提供中英双语设置界面、流式输出和敏感路径过滤。</li>
-            <li>配置入口：<code>Settings / Preferences | Tools | AI Commit Message</code>。</li>
+            <li>支持 Claude 和 Codex/OpenAI 兼容中转站，提供按平台整理的模型预设，并仅在选择自定义模型时展示自定义输入框。</li>
+            <li>可从本地 <code>~/.claude</code> 和 <code>~/.codex</code> 配置回显模型、Base URL、API Key 和 Wire API，保存后优先使用插件自己的配置。</li>
+            <li>提供恢复默认能力，可重新读取本地提供方配置，且不会修改本地工具配置文件。</li>
+            <li>内置 commitlint 风格的 <code>git-commit</code> Skill，同时支持更紧凑的按提供方本地 Skill 选择。</li>
+            <li>提供本地化生成状态、校验提示、失败通知、流式输出和敏感路径过滤。</li>
+            <li>配置入口：<code>Settings / Preferences | Other Settings | AI Commit Message</code>。</li>
         </ul>
     ]]></description>
 
     <change-notes><![CDATA[
         <p><b>English</b></p>
         <ul>
-            <li>Adjusted commit prompt body rules to group bullets by intent and impact instead of listing one bullet per file.</li>
-            <li>Scaled body bullet guidance for small, medium, and very large diffs, with extra coverage for 20+ file changes.</li>
-            <li>Clarified empty-selection messages and allowed empty included/selected change collections to keep the commit UI flow consistent.</li>
-            <li>Updated the bundled git-commit Skill and tests to match the grouped body guidance.</li>
-            <li>Removed remote screenshot references from the plugin description to avoid broken Marketplace images after repository changes.</li>
+            <li>Refreshed Claude and Codex model presets, including GPT-5.5 and Claude Opus 4.7 defaults, with custom model input shown only after selecting the custom model option.</li>
+            <li>Added automatic reflection from local <code>~/.claude</code> and <code>~/.codex</code> configs, including Codex <code>auth.json</code>, plus a restore-defaults action that re-reads local config without modifying it.</li>
+            <li>Made saved plugin provider settings take priority after the first save, so reopening settings keeps the user-saved values instead of overwriting them from local config.</li>
+            <li>Localized commit-language labels, generation status, validation messages, and failure notifications; generation failures now clear the Commit Message field and only show errors as notifications.</li>
+            <li>Improved prompt scaling for complex single-file diffs so generated messages stay concrete instead of collapsing into generic one-bullet summaries.</li>
+            <li>Kept modified large-file diffs visible by extracting truncated line-level changes instead of sending an omitted-content placeholder to the model.</li>
+            <li>Improved settings layout with a cleaner Codex Base URL row and compact local Skill labels, changed the default timeout to 75 seconds, and removed bundled unused dependencies to shrink the plugin package.</li>
         </ul>
         <p><b>中文</b></p>
         <ul>
-            <li>调整提交信息正文规则，按意图和影响分组，而不是按文件逐条罗列。</li>
-            <li>按小型、中型和超大型 diff 缩放正文 bullet 数量，并补充 20+ 文件变更的覆盖要求。</li>
-            <li>优化未选择文件时的提示文案，并允许空的 included/selected 变更集合保持提交 UI 流程一致。</li>
-            <li>同步更新内置 git-commit Skill 和测试，保持与分组正文规则一致。</li>
+            <li>更新 Claude 和 Codex 模型预设，默认使用 GPT-5.5 和 Claude Opus 4.7，并且只有选择自定义模型选项后才显示自定义模型输入框。</li>
+            <li>新增自动回显本地 <code>~/.claude</code> 和 <code>~/.codex</code> 配置，包括 Codex <code>auth.json</code>，并提供“恢复默认”按钮用于重新读取本地配置且不修改本地文件。</li>
+            <li>首次保存后优先使用插件保存的提供方配置，重新进入设置页时不会再被本地配置覆盖。</li>
+            <li>提交语言名称、生成状态、校验提示和失败通知均按目标提交语言展示；生成失败时清空 Commit Message 输入框，错误只通过通知弹窗展示。</li>
+            <li>优化复杂单文件 diff 的 prompt 缩放策略，避免生成结果被压缩成泛泛的一条正文。</li>
+            <li>修改型大文件会提取截断后的行级变更，不再把内容省略占位符直接发送给模型。</li>
+            <li>优化设置页布局，清理 Codex Base URL 行并压缩本地 Skill 显示宽度；默认超时调整为 75 秒，同时移除未使用依赖以显著缩小插件包体积。</li>
         </ul>
     ]]></change-notes>
 
