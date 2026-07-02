@@ -8,8 +8,8 @@ Standalone JetBrains IDE plugin MVP for generating Git commit messages from the 
 
 - Adds an AI generate action to the Commit message toolbar.
 - Uses only the files selected for commit.
-- Writes the generated message directly into the Commit Message input.
-- Shows a loading icon while generation is running.
+- Streams generated content into the Commit Message input after real AI text arrives.
+- Shows a loading icon while generation is running; hover over it to reveal a stop icon and cancel the current stream.
 - Times out after 75 seconds by default.
 - Clears the Commit Message input and shows a localized notification when generation fails.
 - Supports Claude and Codex/OpenAI-compatible relays.
@@ -63,3 +63,11 @@ Codex / OpenAI-compatible:
 ```
 
 The plugin is compiled against JetBrains Platform `2022.1.4` as the minimum API baseline, declares `2022.1+` compatibility without an upper build cap, and uses compatibility fallbacks for Commit UI data collection.
+
+## Changelog
+
+### 1.0.3
+
+- Kept the Commit Message field unchanged until real generated content arrives.
+- Restored the native loading animation during generation and shows a matching gray stop icon on hover.
+- Stopping generation leaves current text untouched and does not show a failure notification.
