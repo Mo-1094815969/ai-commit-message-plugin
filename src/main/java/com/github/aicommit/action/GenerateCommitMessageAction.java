@@ -30,8 +30,9 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.swing.Icon;
 import java.util.Collection;
-import java.util.Set;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -42,8 +43,11 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class GenerateCommitMessageAction extends AnAction implements DumbAware {
     private static final Logger LOG = Logger.getInstance(GenerateCommitMessageAction.class);
     private static final String NOTIFICATION_GROUP = "AI Commit Message Notifications";
-    private static final Set<String> IN_FLIGHT_PROJECTS = ConcurrentHashMap.newKeySet();
+    // 按项目保存生成任务，工具栏再次点击时可以定位并终止当前 AI 请求
+    private static final ConcurrentMap<String, GenerationTask> IN_FLIGHT_TASKS = new ConcurrentHashMap<>();
     private static final Icon ACTION_ICON = IconLoader.getIcon("/icons/ai-commit.svg", GenerateCommitMessageAction.class);
+    private static final Icon LOADING_ICON = AnimatedIcon.Default.INSTANCE;
+    private static final Icon STOP_ICON = IconLoader.getIcon("/icons/ai-commit-stop.svg", GenerateCommitMessageAction.class);
     private static final long STREAM_UPDATE_INTERVAL_MILLIS = 20;
 
     private final SelectedChangesCollector changesCollector = new SelectedChangesCollector();
@@ -56,6 +60,14 @@ public final class GenerateCommitMessageAction extends AnAction implements DumbA
             notify(null, CommitLanguage.noProjectMessage(settings.language), NotificationType.WARNING);
             return;
         }
+
+        String projectKey = projectKey(project);
+        GenerationTask runningTask = IN_FLIGHT_TASKS.get(projectKey);
+        if (runningTask != null) {
+            cancelGeneration(projectKey, runningTask);
+            return;
+        }
+
         CommitMessageI commitMessagePanel = changesCollector.getCommitMessagePanel(event);
         if (commitMessagePanel == null) {
             notify(project, CommitLanguage.noPanelMessage(settings.language), NotificationType.WARNING);
@@ -67,23 +79,21 @@ public final class GenerateCommitMessageAction extends AnAction implements DumbA
             return;
         }
 
-        String projectKey = project.getBasePath() != null ? project.getBasePath() : project.getName();
-        if (!IN_FLIGHT_PROJECTS.add(projectKey)) {
-            notify(project, CommitLanguage.alreadyRunningMessage(settings.language), NotificationType.WARNING);
+        Presentation presentation = event.getPresentation();
+        GenerationTask task = new GenerationTask(presentation);
+        GenerationTask previousTask = IN_FLIGHT_TASKS.putIfAbsent(projectKey, task);
+        if (previousTask != null) {
+            cancelGeneration(projectKey, previousTask);
             return;
         }
 
-        Presentation presentation = event.getPresentation();
-        commitMessagePanel.setCommitMessage(CommitLanguage.generatingMessage(settings.language));
-        presentation.setIcon(AnimatedIcon.Default.INSTANCE);
+        showRunningIcon(presentation);
 
         CommitMessageCleaner cleaner = new CommitMessageCleaner();
         StringBuilder streamed = new StringBuilder();
-        AtomicBoolean completed = new AtomicBoolean(false);
         AtomicInteger visualPos = new AtomicInteger(0);
-        AtomicReference<Future<?>> workerRef = new AtomicReference<>();
         ScheduledFuture<?> streamTicker = AppExecutorUtil.getAppScheduledExecutorService().scheduleWithFixedDelay(() -> {
-            if (completed.get()) {
+            if (task.completed.get()) {
                 return;
             }
             String snapshot;
@@ -105,19 +115,20 @@ public final class GenerateCommitMessageAction extends AnAction implements DumbA
             visualPos.set(newPos);
             String toShow = fullCleaned.substring(0, newPos);
             ApplicationManager.getApplication().invokeLater(() -> {
-                if (!completed.get()) {
+                if (!task.completed.get()) {
                     commitMessagePanel.setCommitMessage(toShow);
                 }
             });
         }, 0, STREAM_UPDATE_INTERVAL_MILLIS, TimeUnit.MILLISECONDS);
+        task.streamTickerRef.set(streamTicker);
         ScheduledFuture<?> timeout = AppExecutorUtil.getAppScheduledExecutorService().schedule(() -> {
-            if (completed.compareAndSet(false, true)) {
-                Future<?> worker = workerRef.get();
+            if (task.completed.compareAndSet(false, true)) {
+                Future<?> worker = task.workerRef.get();
                 if (worker != null) {
                     worker.cancel(true);
                 }
                 streamTicker.cancel(false);
-                IN_FLIGHT_PROJECTS.remove(projectKey);
+                IN_FLIGHT_TASKS.remove(projectKey, task);
                 ApplicationManager.getApplication().invokeLater(() -> {
                     commitMessagePanel.setCommitMessage("");
                     restoreIcon(presentation);
@@ -126,6 +137,7 @@ public final class GenerateCommitMessageAction extends AnAction implements DumbA
                 });
             }
         }, settings.timeoutSeconds, TimeUnit.SECONDS);
+        task.timeoutRef.set(timeout);
 
         Future<?> worker = ApplicationManager.getApplication().executeOnPooledThread(() -> {
             try {
@@ -141,8 +153,9 @@ public final class GenerateCommitMessageAction extends AnAction implements DumbA
                         + ", model=" + safeModel(config.getModel())
                         + ", promptLength=" + prompt.length());
                 String raw = provider.generateStreaming(prompt, config, settings.timeoutSeconds, chunk -> {
-                    if (completed.get()) {
-                        return;
+                    if (task.completed.get()) {
+                        // 已取消时主动打断 SSE 读取，避免后台继续消费后续 token
+                        throw new CancellationException("Commit message generation stopped by user.");
                     }
                     synchronized (streamed) {
                         streamed.append(chunk);
@@ -152,10 +165,10 @@ public final class GenerateCommitMessageAction extends AnAction implements DumbA
                 if (cleaned.isEmpty()) {
                     throw new IllegalStateException("AI returned an empty commit message.");
                 }
-                if (completed.compareAndSet(false, true)) {
+                if (task.completed.compareAndSet(false, true)) {
                     timeout.cancel(false);
                     streamTicker.cancel(false);
-                    IN_FLIGHT_PROJECTS.remove(projectKey);
+                    IN_FLIGHT_TASKS.remove(projectKey, task);
                     ApplicationManager.getApplication().invokeLater(() -> {
                         commitMessagePanel.setCommitMessage(cleaned);
                         restoreIcon(presentation);
@@ -163,11 +176,15 @@ public final class GenerateCommitMessageAction extends AnAction implements DumbA
                     });
                 }
             } catch (Exception e) {
+                if (task.completed.get()) {
+                    LOG.debug("AI commit message generation was cancelled.");
+                    return;
+                }
                 LOG.warn("AI commit message generation failed: " + e.getMessage(), e);
-                if (completed.compareAndSet(false, true)) {
+                if (task.completed.compareAndSet(false, true)) {
                     timeout.cancel(false);
                     streamTicker.cancel(false);
-                    IN_FLIGHT_PROJECTS.remove(projectKey);
+                    IN_FLIGHT_TASKS.remove(projectKey, task);
                     ApplicationManager.getApplication().invokeLater(() -> {
                         String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
                         commitMessagePanel.setCommitMessage("");
@@ -178,7 +195,7 @@ public final class GenerateCommitMessageAction extends AnAction implements DumbA
                 }
             }
         });
-        workerRef.set(worker);
+        task.workerRef.set(worker);
     }
 
     @Override
@@ -187,20 +204,53 @@ public final class GenerateCommitMessageAction extends AnAction implements DumbA
         boolean visible = project != null;
         event.getPresentation().setEnabledAndVisible(visible);
         event.getPresentation().setText(AiCommitBundle.message("action.generate.text"));
-        event.getPresentation().setDescription(AiCommitBundle.message("action.generate.description"));
         if (project != null) {
-            String projectKey = project.getBasePath() != null ? project.getBasePath() : project.getName();
-            if (IN_FLIGHT_PROJECTS.contains(projectKey)) {
-                event.getPresentation().setIcon(AnimatedIcon.Default.INSTANCE);
-                event.getPresentation().setEnabled(false);
+            String projectKey = projectKey(project);
+            if (IN_FLIGHT_TASKS.containsKey(projectKey)) {
+                showRunningIcon(event.getPresentation());
+                event.getPresentation().setEnabled(true);
+                event.getPresentation().setDescription(AiCommitBundle.message("action.stop.description"));
             } else {
-                event.getPresentation().setIcon(ACTION_ICON);
+                restoreIcon(event.getPresentation());
+                event.getPresentation().setDescription(AiCommitBundle.message("action.generate.description"));
             }
         }
     }
 
+    private void cancelGeneration(String projectKey, GenerationTask task) {
+        // 用户主动停止只结束当前流式输出，不清空或回滚 Commit Message 中已有内容
+        if (!task.completed.compareAndSet(false, true)) {
+            return;
+        }
+        Future<?> worker = task.workerRef.get();
+        if (worker != null) {
+            worker.cancel(true);
+        }
+        ScheduledFuture<?> timeout = task.timeoutRef.get();
+        if (timeout != null) {
+            timeout.cancel(false);
+        }
+        ScheduledFuture<?> streamTicker = task.streamTickerRef.get();
+        if (streamTicker != null) {
+            streamTicker.cancel(false);
+        }
+        IN_FLIGHT_TASKS.remove(projectKey, task);
+        ApplicationManager.getApplication().invokeLater(() -> restoreIcon(task.presentation));
+    }
+
     private void restoreIcon(Presentation presentation) {
         presentation.setIcon(ACTION_ICON);
+        presentation.setHoveredIcon(null);
+    }
+
+    private void showRunningIcon(Presentation presentation) {
+        // 生成中默认展示 IDE 原生加载动画，悬停时才露出同色系停止入口
+        presentation.setIcon(LOADING_ICON);
+        presentation.setHoveredIcon(STOP_ICON);
+    }
+
+    private String projectKey(Project project) {
+        return project.getBasePath() != null ? project.getBasePath() : project.getName();
     }
 
     private void notify(Project project, String content, NotificationType type) {
@@ -212,5 +262,17 @@ public final class GenerateCommitMessageAction extends AnAction implements DumbA
 
     private String safeModel(String model) {
         return model == null || model.trim().isEmpty() ? "default" : model.trim();
+    }
+
+    private static final class GenerationTask {
+        private final Presentation presentation;
+        private final AtomicBoolean completed = new AtomicBoolean(false);
+        private final AtomicReference<Future<?>> workerRef = new AtomicReference<>();
+        private final AtomicReference<ScheduledFuture<?>> timeoutRef = new AtomicReference<>();
+        private final AtomicReference<ScheduledFuture<?>> streamTickerRef = new AtomicReference<>();
+
+        private GenerationTask(Presentation presentation) {
+            this.presentation = presentation;
+        }
     }
 }
