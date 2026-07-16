@@ -36,12 +36,14 @@ patchPluginXml {
     changeNotes = '''
         <p><b>English</b></p>
         <ul>
+            <li>Set GPT-5.6 Sol and Claude Opus 4.8 as the default models, added the GPT-5.6 Sol, Terra, and Luna family alongside GPT-5.5 and GPT-5.4, and removed GPT-5.3 Codex and GPT-5.4 Mini.</li>
             <li>Fixed restoring local Codex settings when the built-in provider is used or the provider is declared by the selected profile.</li>
             <li>Local and custom model IDs now appear directly in an editable model dropdown and are saved correctly even before the field loses focus.</li>
             <li>Removed the dynamically shown custom-model row and kept settings action buttons compact and left-aligned to prevent layout shifts.</li>
         </ul>
         <p><b>中文</b></p>
         <ul>
+            <li>默认模型更新为 GPT-5.6 Sol 和 Claude Opus 4.8，GPT 下拉框包含 GPT-5.6 Sol、Terra、Luna，以及 GPT-5.5 和 GPT-5.4，并移除 GPT-5.3 Codex 和 GPT-5.4 Mini。</li>
             <li>修复 Codex 使用内置提供方或在选中 profile 中声明提供方时，恢复默认无法正确读取本地配置的问题。</li>
             <li>本地及自定义模型 ID 直接显示在可编辑模型下拉框中，输入框未失焦时也能正确保存当前值。</li>
             <li>移除动态显隐的自定义模型行，并让设置页操作按钮保持紧凑左对齐，避免恢复配置后布局跳动。</li>

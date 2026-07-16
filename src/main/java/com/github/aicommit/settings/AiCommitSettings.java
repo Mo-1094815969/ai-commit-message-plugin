@@ -17,8 +17,8 @@ public final class AiCommitSettings implements PersistentStateComponent<AiCommit
     public static final String PROVIDER_OPENAI = "openai";
     public static final String UI_LANGUAGE_EN = "English";
     public static final String UI_LANGUAGE_ZH = "中文";
-    public static final String DEFAULT_CLAUDE_MODEL = "claude-opus-4-7";
-    public static final String DEFAULT_OPENAI_MODEL = "gpt-5.5";
+    public static final String DEFAULT_CLAUDE_MODEL = "claude-opus-4-8";
+    public static final String DEFAULT_OPENAI_MODEL = "gpt-5.6-sol";
 
     private State state = new State();
 

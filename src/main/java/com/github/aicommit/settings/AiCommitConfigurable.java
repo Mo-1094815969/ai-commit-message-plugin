@@ -39,17 +39,20 @@ public final class AiCommitConfigurable implements Configurable {
     private static final int SKILL_COMBO_MAX_WIDTH = 420;
     private static final int SKILL_COMBO_PADDING = 48;
     private static final String[] CLAUDE_MODELS = {
+            "claude-fable-5",
             AiCommitSettings.DEFAULT_CLAUDE_MODEL,
+            "claude-opus-4-7",
             "claude-opus-4-6",
+            "claude-sonnet-5",
             "claude-sonnet-4-6",
             "claude-haiku-4-5-20251001"
     };
     private static final String[] OPENAI_MODELS = {
             AiCommitSettings.DEFAULT_OPENAI_MODEL,
-            "gpt-5.4",
-            "gpt-5.4-mini",
-            "gpt-5.3-codex",
-            "gpt-5.2"
+            "gpt-5.6-terra",
+            "gpt-5.6-luna",
+            "gpt-5.5",
+            "gpt-5.4"
     };
 
     private ComboBox<String> uiLanguageCombo;
