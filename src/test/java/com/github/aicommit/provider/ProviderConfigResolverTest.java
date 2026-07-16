@@ -154,6 +154,52 @@ public class ProviderConfigResolverTest {
     }
 
     @Test
+    public void resolvesCodexBuiltInProviderWithoutProviderSection() throws Exception {
+        Path home = temporaryFolder.newFolder("home").toPath();
+        Path codexDir = home.resolve(".codex");
+        Files.createDirectories(codexDir);
+        Files.write(codexDir.resolve("config.toml"), "model = \"gpt-5.6\"\n".getBytes(StandardCharsets.UTF_8));
+        Files.write(codexDir.resolve("auth.json"), (
+                "{\n"
+                        + "  \"OPENAI_API_KEY\": \"auth-json-key\"\n"
+                        + "}\n").getBytes(StandardCharsets.UTF_8));
+        System.setProperty("user.home", home.toString());
+
+        EffectiveProviderConfig config = new ProviderConfigResolver().resolveLocalToolConfig(ProviderKind.OPENAI);
+
+        Assert.assertEquals("auth-json-key", config.getApiKey());
+        Assert.assertEquals("gpt-5.6", config.getModel());
+        Assert.assertEquals("", config.getBaseUrl());
+    }
+
+    @Test
+    public void resolvesCodexProviderDeclaredBySelectedProfile() throws Exception {
+        Path home = temporaryFolder.newFolder("home").toPath();
+        Path codexDir = home.resolve(".codex");
+        Files.createDirectories(codexDir);
+        Files.write(codexDir.resolve("config.toml"), (
+                "profile = \"work\"\n\n"
+                        + "[profiles.work]\n"
+                        + "model = \"gpt-profile\"\n"
+                        + "model_provider = \"relay\"\n\n"
+                        + "[model_providers.relay]\n"
+                        + "base_url = \"https://relay.example.com/v1\"\n"
+                        + "wire_api = \"responses\"\n").getBytes(StandardCharsets.UTF_8));
+        Files.write(codexDir.resolve("auth.json"), (
+                "{\n"
+                        + "  \"OPENAI_API_KEY\": \"auth-json-key\"\n"
+                        + "}\n").getBytes(StandardCharsets.UTF_8));
+        System.setProperty("user.home", home.toString());
+
+        EffectiveProviderConfig config = new ProviderConfigResolver().resolveLocalToolConfig(ProviderKind.OPENAI);
+
+        Assert.assertEquals("auth-json-key", config.getApiKey());
+        Assert.assertEquals("https://relay.example.com/v1", config.getBaseUrl());
+        Assert.assertEquals("gpt-profile", config.getModel());
+        Assert.assertEquals("responses", config.getWireApi());
+    }
+
+    @Test
     public void resolvesClaudeConfigFromLocalSettings() throws Exception {
         Path home = temporaryFolder.newFolder("home").toPath();
         Path claudeDir = home.resolve(".claude");

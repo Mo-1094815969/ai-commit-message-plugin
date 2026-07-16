@@ -2,7 +2,7 @@
     <id>com.github.aicommit.message.generator</id>
     <name>AI Commit Message Generator</name>
     <vendor>Mo</vendor>
-    <version>1.0.3</version>
+    <version>1.0.3-fix</version>
 
     <resource-bundle>messages.AiCommitBundle</resource-bundle>
 
@@ -12,9 +12,9 @@
         <ul>
             <li>Configuration path: <code>Settings / Preferences | Other Settings | AI Commit Message</code>.</li>
             <li>Writes the result directly into the Commit Message field.</li>
-            <li>Supports Claude and Codex/OpenAI-compatible relays with provider model presets and an on-demand custom model field.</li>
+            <li>Supports Claude and Codex/OpenAI-compatible relays with model presets and an editable model dropdown for arbitrary compatible model IDs.</li>
             <li>Reflects local <code>~/.claude</code> and <code>~/.codex</code> config for model, Base URL, API key, and Wire API, while preserving user-saved plugin settings after save.</li>
-            <li>Includes a restore-defaults action that re-reads local provider config without modifying local tool files.</li>
+            <li>Includes a restore-defaults action that re-reads local provider config, including built-in and profile-selected Codex providers, without modifying local tool files.</li>
             <li>Includes a built-in commitlint-style <code>git-commit</code> Skill plus compact provider-specific local Skill selection.</li>
             <li>Offers localized validation, failure notifications, streaming updates, hover-to-stop generation control, and sensitive-path filtering.</li>
         </ul>
@@ -22,9 +22,9 @@
         <p>根据 JetBrains Commit 工具窗口中已选择的文件，生成更完整、更规范的 Git commit message。</p>
         <ul>
             <li>将结果直接写入 Commit Message 输入框。</li>
-            <li>支持 Claude 和 Codex/OpenAI 兼容中转站，提供按平台整理的模型预设，并仅在选择自定义模型时展示自定义输入框。</li>
+            <li>支持 Claude 和 Codex/OpenAI 兼容中转站，提供模型预设和可编辑模型下拉框，可直接填写任意兼容模型 ID。</li>
             <li>可从本地 <code>~/.claude</code> 和 <code>~/.codex</code> 配置回显模型、Base URL、API Key 和 Wire API，保存后优先使用插件自己的配置。</li>
-            <li>提供恢复默认能力，可重新读取本地提供方配置，且不会修改本地工具配置文件。</li>
+            <li>提供恢复默认能力，可重新读取本地提供方配置，并兼容 Codex 内置提供方和 profile 选中的提供方，且不会修改本地工具配置文件。</li>
             <li>内置 commitlint 风格的 <code>git-commit</code> Skill，同时支持更紧凑的按提供方本地 Skill 选择。</li>
             <li>提供本地化校验提示、失败通知、流式输出、悬停停止生成和敏感路径过滤。</li>
             <li>配置入口：<code>Settings / Preferences | Other Settings | AI Commit Message</code>。</li>
@@ -34,15 +34,15 @@
     <change-notes><![CDATA[
         <p><b>English</b></p>
         <ul>
-            <li>Kept the Commit Message field unchanged when generation starts; generated text is written only after real AI content arrives.</li>
-            <li>Restored the native loading animation while generating, with a matching gray stop icon shown on hover.</li>
-            <li>Clicking the running action now stops the current stream, leaves existing text untouched, and suppresses failure notifications for user-initiated cancellation.</li>
+            <li>Fixed restoring local Codex settings when the built-in provider is used or the provider is declared by the selected profile.</li>
+            <li>Local and custom model IDs now appear directly in an editable model dropdown and are saved correctly even before the field loses focus.</li>
+            <li>Removed the dynamically shown custom-model row and kept settings action buttons compact and left-aligned to prevent layout shifts.</li>
         </ul>
         <p><b>中文</b></p>
         <ul>
-            <li>开始生成时不再改写 Commit Message 输入框，只有收到真实 AI 内容后才开始写入。</li>
-            <li>生成中恢复 IDE 原生加载动画，鼠标悬停时展示同色系灰色停止图标。</li>
-            <li>点击运行中的按钮会停止当前流式输出，保留已有文本，并且用户主动取消不会弹出失败通知。</li>
+            <li>修复 Codex 使用内置提供方或在选中 profile 中声明提供方时，恢复默认无法正确读取本地配置的问题。</li>
+            <li>本地及自定义模型 ID 直接显示在可编辑模型下拉框中，输入框未失焦时也能正确保存当前值。</li>
+            <li>移除动态显隐的自定义模型行，并让设置页操作按钮保持紧凑左对齐，避免恢复配置后布局跳动。</li>
         </ul>
     ]]></change-notes>
 

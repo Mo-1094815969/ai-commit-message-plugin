@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'com.github.aicommit'
-version = '1.0.3'
+version = '1.0.3-fix'
 
 repositories {
     mavenCentral()
@@ -36,15 +36,15 @@ patchPluginXml {
     changeNotes = '''
         <p><b>English</b></p>
         <ul>
-            <li>Kept the Commit Message field unchanged when generation starts; generated text is written only after real AI content arrives.</li>
-            <li>Restored the native loading animation while generating, with a matching gray stop icon shown on hover.</li>
-            <li>Clicking the running action now stops the current stream, leaves existing text untouched, and suppresses failure notifications for user-initiated cancellation.</li>
+            <li>Fixed restoring local Codex settings when the built-in provider is used or the provider is declared by the selected profile.</li>
+            <li>Local and custom model IDs now appear directly in an editable model dropdown and are saved correctly even before the field loses focus.</li>
+            <li>Removed the dynamically shown custom-model row and kept settings action buttons compact and left-aligned to prevent layout shifts.</li>
         </ul>
         <p><b>中文</b></p>
         <ul>
-            <li>开始生成时不再改写 Commit Message 输入框，只有收到真实 AI 内容后才开始写入。</li>
-            <li>生成中恢复 IDE 原生加载动画，鼠标悬停时展示同色系灰色停止图标。</li>
-            <li>点击运行中的按钮会停止当前流式输出，保留已有文本，并且用户主动取消不会弹出失败通知。</li>
+            <li>修复 Codex 使用内置提供方或在选中 profile 中声明提供方时，恢复默认无法正确读取本地配置的问题。</li>
+            <li>本地及自定义模型 ID 直接显示在可编辑模型下拉框中，输入框未失焦时也能正确保存当前值。</li>
+            <li>移除动态显隐的自定义模型行，并让设置页操作按钮保持紧凑左对齐，避免恢复配置后布局跳动。</li>
         </ul>
     '''
 }

@@ -28,6 +28,7 @@ import javax.swing.SpinnerNumberModel;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FontMetrics;
+import java.awt.FlowLayout;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -61,11 +62,9 @@ public final class AiCommitConfigurable implements Configurable {
     private JBPasswordField claudeApiKey;
     private JBTextField claudeBaseUrl;
     private ComboBox<String> claudeModelCombo;
-    private JBTextField claudeCustomModel;
     private JBPasswordField openaiApiKey;
     private JBTextField openaiBaseUrl;
     private ComboBox<String> openaiModelCombo;
-    private JBTextField openaiCustomModel;
     private ComboBox<String> openaiWireApiCombo;
     private JButton refreshSkillsButton;
     private JButton restoreDefaultsButton;
@@ -80,12 +79,10 @@ public final class AiCommitConfigurable implements Configurable {
     private JLabel claudeApiKeyLabel;
     private JLabel claudeBaseUrlLabel;
     private JLabel claudeModelLabel;
-    private JLabel claudeCustomModelLabel;
     private JLabel openaiSectionLabel;
     private JLabel openaiApiKeyLabel;
     private JLabel openaiBaseUrlLabel;
     private JLabel openaiModelLabel;
-    private JLabel openaiCustomModelLabel;
     private JLabel openaiWireApiLabel;
     private JPanel panel;
     private final Map<String, String> providerLabelsToIds = new LinkedHashMap<>();
@@ -114,11 +111,11 @@ public final class AiCommitConfigurable implements Configurable {
         claudeApiKey = new JBPasswordField();
         claudeBaseUrl = new JBTextField();
         claudeModelCombo = new ComboBox<>();
-        claudeCustomModel = new JBTextField();
+        claudeModelCombo.setEditable(true);
         openaiApiKey = new JBPasswordField();
         openaiBaseUrl = new JBTextField();
         openaiModelCombo = new ComboBox<>();
-        openaiCustomModel = new JBTextField();
+        openaiModelCombo.setEditable(true);
         openaiWireApiCombo = new ComboBox<>(new String[]{"Chat Completions", "Responses"});
 
         refreshSkillsButton = new JButton();
@@ -130,10 +127,6 @@ public final class AiCommitConfigurable implements Configurable {
             loadSkills(getCurrentProjectBasePath(), false);
         });
         providerCombo.addActionListener(event -> loadSkills(getCurrentProjectBasePath(), false));
-        claudeModelCombo.addActionListener(event ->
-                updateModelInputState(claudeModelCombo, claudeCustomModel, claudeCustomModelLabel));
-        openaiModelCombo.addActionListener(event ->
-                updateModelInputState(openaiModelCombo, openaiCustomModel, openaiCustomModelLabel));
 
         uiLanguageLabel = new JBLabel();
         providerLabel = new JBLabel();
@@ -146,17 +139,20 @@ public final class AiCommitConfigurable implements Configurable {
         claudeApiKeyLabel = new JBLabel();
         claudeBaseUrlLabel = new JBLabel();
         claudeModelLabel = new JBLabel();
-        claudeCustomModelLabel = new JBLabel();
         openaiSectionLabel = new JBLabel();
         openaiApiKeyLabel = new JBLabel();
         openaiBaseUrlLabel = new JBLabel();
         openaiModelLabel = new JBLabel();
-        openaiCustomModelLabel = new JBLabel();
         openaiWireApiLabel = new JBLabel();
 
         applyStateToUi(state);
         loadSkills(getCurrentProjectBasePath(), false);
         updateTexts();
+
+        JPanel refreshSkillsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        refreshSkillsPanel.add(refreshSkillsButton);
+        JPanel restoreDefaultsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        restoreDefaultsPanel.add(restoreDefaultsButton);
 
         FormBuilder builder = FormBuilder.createFormBuilder()
                 .setHorizontalGap(8)
@@ -164,25 +160,23 @@ public final class AiCommitConfigurable implements Configurable {
                 .addLabeledComponent(providerLabel, providerCombo, 1, false)
                 .addLabeledComponent(languageLabel, languageCombo, 1, false)
                 .addLabeledComponent(skillLabel, skillCombo, 1, false)
-                .addComponent(refreshSkillsButton)
+                .addComponent(refreshSkillsPanel)
                 .addLabeledComponent(timeoutLabel, timeoutSpinner, 1, false)
                 .addComponent(sensitiveFilterCheckBox)
                 .addLabeledComponent(excludedPathsLabel, new JBScrollPane(excludePatternsArea), 1, true)
                 .addSeparator()
                 .addComponent(priorityHintLabel)
-                .addComponent(restoreDefaultsButton)
+                .addComponent(restoreDefaultsPanel)
                 .addSeparator()
                 .addComponent(claudeSectionLabel)
                 .addLabeledComponent(claudeApiKeyLabel, claudeApiKey, 1, false)
                 .addLabeledComponent(claudeBaseUrlLabel, claudeBaseUrl, 1, false)
                 .addLabeledComponent(claudeModelLabel, claudeModelCombo, 1, false)
-                .addLabeledComponent(claudeCustomModelLabel, claudeCustomModel, 1, false)
                 .addSeparator()
                 .addComponent(openaiSectionLabel)
                 .addLabeledComponent(openaiApiKeyLabel, openaiApiKey, 1, false)
                 .addLabeledComponent(openaiBaseUrlLabel, openaiBaseUrl, 1, false)
                 .addLabeledComponent(openaiModelLabel, openaiModelCombo, 1, false)
-                .addLabeledComponent(openaiCustomModelLabel, openaiCustomModel, 1, false)
                 .addLabeledComponent(openaiWireApiLabel, openaiWireApiCombo, 1, false)
                 .addComponentFillVertically(new JPanel(), 0);
 
@@ -229,10 +223,10 @@ public final class AiCommitConfigurable implements Configurable {
         excludePatternsArea.setText(state.excludePatterns);
         setPasswordText(claudeApiKey, state.claude.apiKey);
         claudeBaseUrl.setText(state.claude.baseUrl);
-        loadModelItems(claudeModelCombo, claudeCustomModel, state.claude.model, CLAUDE_MODELS);
+        loadModelItems(claudeModelCombo, state.claude.model, CLAUDE_MODELS);
         setPasswordText(openaiApiKey, state.openai.apiKey);
         openaiBaseUrl.setText(state.openai.baseUrl);
-        loadModelItems(openaiModelCombo, openaiCustomModel, state.openai.model, OPENAI_MODELS);
+        loadModelItems(openaiModelCombo, state.openai.model, OPENAI_MODELS);
         openaiWireApiCombo.setSelectedItem(wireApiLabel(state.openai.wireApi));
         selectSkill(state.skillRef);
     }
@@ -270,6 +264,7 @@ public final class AiCommitConfigurable implements Configurable {
 
     private void restoreProviderDefaultsFromLocalConfig() {
         AiCommitSettings.State state = readStateFromUi();
+        // 仅重置提供方字段，保留语言、过滤规则等页面设置，再用本地工具配置完整回填
         state.claude = new AiCommitSettings.ProviderState(AiCommitSettings.DEFAULT_CLAUDE_MODEL);
         state.openai = new AiCommitSettings.ProviderState(AiCommitSettings.DEFAULT_OPENAI_MODEL);
         applyLocalToolConfigToState(state, true);
@@ -288,10 +283,10 @@ public final class AiCommitConfigurable implements Configurable {
         state.excludePatterns = excludePatternsArea.getText();
         state.claude.apiKey = new String(claudeApiKey.getPassword()).trim();
         state.claude.baseUrl = claudeBaseUrl.getText().trim();
-        state.claude.model = readModelFromUi(claudeModelCombo, claudeCustomModel);
+        state.claude.model = readModelFromUi(claudeModelCombo);
         state.openai.apiKey = new String(openaiApiKey.getPassword()).trim();
         state.openai.baseUrl = openaiBaseUrl.getText().trim();
-        state.openai.model = readModelFromUi(openaiModelCombo, openaiCustomModel);
+        state.openai.model = readModelFromUi(openaiModelCombo);
         state.openai.wireApi = wireApiValue(stringValue(openaiWireApiCombo.getSelectedItem()));
         state.normalize();
         return state;
@@ -375,8 +370,8 @@ public final class AiCommitConfigurable implements Configurable {
     private void updateTexts() {
         String selectedProvider = providerLabelsToIds.getOrDefault(stringValue(providerCombo.getSelectedItem()),
                 AiCommitSettings.PROVIDER_AUTO);
-        String selectedClaudeModel = readModelFromUi(claudeModelCombo, claudeCustomModel);
-        String selectedOpenAiModel = readModelFromUi(openaiModelCombo, openaiCustomModel);
+        String selectedClaudeModel = readModelFromUi(claudeModelCombo);
+        String selectedOpenAiModel = readModelFromUi(openaiModelCombo);
         uiLanguageLabel.setText(zh() ? "界面语言" : "Interface language");
         providerLabel.setText(zh() ? "AI 提供方" : "Provider");
         languageLabel.setText(zh() ? "提交信息语言" : "Commit message language");
@@ -395,18 +390,14 @@ public final class AiCommitConfigurable implements Configurable {
         claudeApiKeyLabel.setText("API Key / Auth Token");
         claudeBaseUrlLabel.setText("Base URL");
         claudeModelLabel.setText(zh() ? "模型" : "Model");
-        claudeCustomModelLabel.setText(zh() ? "自定义模型 ID（可填写任意兼容模型）"
-                : "Custom model ID, any compatible model");
         openaiSectionLabel.setText(codexProviderLabel());
         openaiApiKeyLabel.setText("API Key");
         openaiBaseUrlLabel.setText("Base URL");
         openaiModelLabel.setText(zh() ? "模型" : "Model");
-        openaiCustomModelLabel.setText(zh() ? "自定义模型 ID（可填写任意兼容模型）"
-                : "Custom model ID, any compatible model");
         openaiWireApiLabel.setText(zh() ? "Wire API（Codex 中转站常用 Responses）" : "Wire API, Codex relays often use Responses");
         loadProviderItems(selectedProvider);
-        loadModelItems(claudeModelCombo, claudeCustomModel, selectedClaudeModel, CLAUDE_MODELS);
-        loadModelItems(openaiModelCombo, openaiCustomModel, selectedOpenAiModel, OPENAI_MODELS);
+        loadModelItems(claudeModelCombo, selectedClaudeModel, CLAUDE_MODELS);
+        loadModelItems(openaiModelCombo, selectedOpenAiModel, OPENAI_MODELS);
     }
 
     private boolean zh() {
@@ -471,53 +462,22 @@ public final class AiCommitConfigurable implements Configurable {
         return zh() ? "内置默认：git-commit" : "Built-in default: git-commit";
     }
 
-    private void loadModelItems(ComboBox<String> combo, JBTextField customModel, String selectedModel,
-                                String[] presetModels) {
+    private void loadModelItems(ComboBox<String> combo, String selectedModel, String[] presetModels) {
         String model = selectedModel == null ? "" : selectedModel.trim();
         combo.removeAllItems();
         for (String presetModel : presetModels) {
             combo.addItem(presetModel);
         }
-        combo.addItem(otherModelLabel());
-        if (isPresetModel(model, presetModels)) {
-            combo.setSelectedItem(model);
-            customModel.setText("");
-        } else {
-            combo.setSelectedItem(otherModelLabel());
-            customModel.setText(model);
+        if (!model.isEmpty() && !isPresetModel(model, presetModels)) {
+            combo.addItem(model);
         }
-        updateModelInputState(combo, customModel, customModelLabel(combo));
+        combo.setSelectedItem(model.isEmpty() ? presetModels[0] : model);
     }
 
-    private String readModelFromUi(ComboBox<String> combo, JBTextField customModel) {
-        String selected = stringValue(combo.getSelectedItem());
-        if (isOtherModelLabel(selected)) {
-            return customModel.getText().trim();
-        }
-        return selected.trim();
-    }
-
-    private void updateModelInputState(ComboBox<String> combo, JBTextField customModel, JLabel customModelLabel) {
-        boolean custom = isOtherModelLabel(stringValue(combo.getSelectedItem()));
-        customModel.setEnabled(custom);
-        customModel.setVisible(custom);
-        if (customModelLabel != null) {
-            customModelLabel.setVisible(custom);
-        }
-        if (panel != null) {
-            panel.revalidate();
-            panel.repaint();
-        }
-    }
-
-    private JLabel customModelLabel(ComboBox<String> combo) {
-        if (combo == claudeModelCombo) {
-            return claudeCustomModelLabel;
-        }
-        if (combo == openaiModelCombo) {
-            return openaiCustomModelLabel;
-        }
-        return null;
+    private String readModelFromUi(ComboBox<String> combo) {
+        // 可编辑下拉框未失焦时 selectedItem 可能仍是旧值，直接读取编辑器确保保存当前输入
+        Object value = combo.isEditable() ? combo.getEditor().getItem() : combo.getSelectedItem();
+        return stringValue(value).trim();
     }
 
     private boolean isPresetModel(String model, String[] presetModels) {
@@ -527,15 +487,6 @@ public final class AiCommitConfigurable implements Configurable {
             }
         }
         return false;
-    }
-
-    private String otherModelLabel() {
-        return zh() ? "（自定义）其他模型" : "(Custom) other model";
-    }
-
-    private boolean isOtherModelLabel(String label) {
-        return "（自定义）其他模型".equals(label)
-                || "(Custom) other model".equals(label);
     }
 
     private void configureSkillComboSize() {

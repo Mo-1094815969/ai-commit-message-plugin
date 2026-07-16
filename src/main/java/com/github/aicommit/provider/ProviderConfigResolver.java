@@ -141,9 +141,14 @@ public final class ProviderConfigResolver {
 
     private EffectiveProviderConfig codexLocalConfig(ResolutionContext context) {
         TomlConfig toml = context.codexConfig;
-        String providerName = toml.root.get("model_provider");
+        Map<String, String> profile = selectedCodexProfile(toml);
+        String providerName = firstValue(toml.root, "model_provider");
+        if (!notBlank(providerName)) {
+            providerName = firstValue(profile, "model_provider");
+        }
         Map<String, String> provider = providerName == null ? null : toml.sections.get("model_providers." + providerName);
         if ((provider == null || provider.isEmpty()) && !toml.sections.isEmpty()) {
+            // 兼容未声明 model_provider 但只配置了一个自定义提供方的旧版 Codex 配置
             for (Map.Entry<String, Map<String, String>> entry : toml.sections.entrySet()) {
                 if (entry.getKey().startsWith("model_providers.")) {
                     provider = entry.getValue();
@@ -151,10 +156,10 @@ public final class ProviderConfigResolver {
                 }
             }
         }
-        if (provider == null || provider.isEmpty()) {
-            return null;
+        if (provider == null) {
+            // 内置 OpenAI 提供方没有 model_providers.* 段，仍需读取根配置和 auth.json
+            provider = new LinkedHashMap<>();
         }
-        Map<String, String> profile = selectedCodexProfile(toml);
         Map<String, String> env = toml.sections.getOrDefault("shell_environment_policy.set", new LinkedHashMap<>());
         String envKey = firstValue(provider, "env_key", "api_key_env", "apiKeyEnv");
         String apiKey = firstValue(provider, "api_key", "apiKey", "OPENAI_API_KEY",
